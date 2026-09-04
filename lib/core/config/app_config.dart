@@ -1,32 +1,32 @@
 /// Konfigurasi global aplikasi STO Preparation.
-///
-/// Semua endpoint API masih menyusul. Selama [useMockApi] bernilai true,
-/// seluruh pemanggilan jaringan dilayani oleh [MockApi] sehingga aplikasi
-/// tetap bisa dijalankan end-to-end tanpa backend.
 class AppConfig {
   AppConfig._();
 
-  static const String appName = 'STO Preparation';
+  static const String appName = 'STO';
   static const String companyName = 'PT. MEKAR ARMADA JAYA';
   static const String plantName = 'PLANT TAMBUN';
   static const String departement = 'IT Department';
-
-  /// Base URL default (bisa diubah user lewat halaman Setting).
-  static const String defaultBaseUrl =
-      'http://192.168.10.67/majsf_rest_api/api';
 
   /// Alamat server yang sah, sebagai pilihan tetap.
   ///
   /// Diketik bebas dulu, dan satu salah ketik membuat seluruh aplikasi diam
   /// tanpa penjelasan - sedangkan alamatnya cuma dua dan jarang berubah.
+  ///
+  /// Keduanya HARUS berakhir di '/api': jalur endpoint ditulis sebagai
+  /// '/sto/part-list', jadi tanpa '/api' server menjawab 404 untuk semuanya.
   static const Map<String, String> serverPilihan = {
+    'Internet (HTTPS)': 'https://mspin.newarmada.biz/sto/public/api',
     'Jaringan pabrik (HTTP)': 'http://192.168.10.67/majsf_rest_api/api',
-    'Internet (HTTPS)': 'https://mspin.newarmada.biz/sto/public',
   };
 
-  /// Set true hanya bila ingin menjalankan mode simulasi tanpa server backend.
-  /// Default: false (menggunakan full API MAJSF).
-  static const bool useMockApi = false;
+  /// Base URL bawaan: HTTPS, dan sengaja disebut sebagai pilihan pertama pada
+  /// [serverPilihan] - bukan alamat tersendiri, supaya tidak mungkin ada
+  /// bawaan yang tidak ada di daftar pilihan.
+  ///
+  /// HTTPS yang jadi bawaan karena handheld baru bisa saja dinyalakan di luar
+  /// jaringan pabrik; alamat 192.168.10.67 hanya menjawab dari dalam, dan
+  /// operator tidak punya cara menebak bahwa itulah sebab aplikasinya diam.
+  static String get defaultBaseUrl => serverPilihan.values.first;
 
   /// Area yang dikenal STO, sama persis dengan isi kolom
   /// `majsf_sto.master_data.area` di server (IFRM 952 part, PRESS 1.168,

@@ -11,43 +11,32 @@ import '../models/tag_ok.dart';
 import 'api_client.dart';
 import 'sto_api.dart';
 
-/// Satu pintu ke API: memilih implementasi mock atau HTTP sesuai setting,
-/// sehingga peralihan ke API asli cukup lewat toggle di halaman Setting.
+/// Satu pintu ke API server STO.
+///
+/// Dulu kelas ini memilih antara data tiruan dan server sungguhan lewat saklar
+/// di halaman Setting. Saklar itu dibuang menjelang produksi: satu saklar yang
+/// tergeser di lapangan berarti hasil hitung yang terlihat tersimpan padahal
+/// tidak pernah sampai ke server - kegagalan paling mahal yang bisa terjadi
+/// pada aplikasi ini.
 class ApiGateway implements StoApi {
   ApiGateway({
     required PrefsStore prefs,
     ApiClient? client,
-    StoApi? mock,
-  })  : _prefs = prefs,
-        _client = client ?? ApiClient(baseUrlResolver: prefs.baseUrl),
-        _mock = mock ?? MockStoApi() {
+  })  : _client = client ?? ApiClient(baseUrlResolver: prefs.baseUrl) {
     _http = HttpStoApi(_client);
   }
 
-  final PrefsStore _prefs;
   final ApiClient _client;
-  final StoApi _mock;
   late final StoApi _http;
 
-  bool _useMock = false;
-
-  bool get useMock => _useMock;
-
-  /// Dipanggil sekali saat bootstrap dan setiap kali setting berubah.
-  Future<void> reloadSettings() async {
-    _useMock = await _prefs.useMockApi();
-  }
-
-  void setUseMock(bool value) => _useMock = value;
-
-  StoApi get _api => _useMock ? _mock : _http;
+  StoApi get _api => _http;
 
   set authToken(String? token) => _client.authToken = token;
 
-  /// Perangkat yang menurut server terpasang pada user hasil login terakhir.
-  /// null saat mode simulasi atau bila user belum dipasangkan.
+  /// Perangkat yang menurut server terpasang pada user hasil login terakhir;
+  /// null bila user belum dipasangkan.
   Map<String, dynamic>? get perangkatTerpasang =>
-      _useMock ? null : (_http as HttpStoApi).perangkatTerpasang;
+      (_http as HttpStoApi).perangkatTerpasang;
 
   @override
   Future<AppUser> login(
@@ -258,8 +247,8 @@ class ApiGateway implements StoApi {
   Future<void> rejectCancelTag(StoTag tag) => _api.rejectCancelTag(tag);
 
   @override
-  Future<Map<String, dynamic>?> fetchTagDetail(String tagNo) =>
-      _api.fetchTagDetail(tagNo);
+  Future<Map<String, dynamic>?> fetchTagDetail(String tagNo, {String? nik}) =>
+      _api.fetchTagDetail(tagNo, nik: nik);
 
   @override
   Future<void> submitCount(Map<String, dynamic> payload) =>

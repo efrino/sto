@@ -86,28 +86,10 @@ contoh + login bebas) sehingga alur bisa diuji penuh sekarang.
 
 Saat API siap:
 
-1. Buka **Setting > Server & API**, isi alamat server, matikan **Gunakan data simulasi**.
+1. Buka **Setting > Server & API**, pilih alamat server yang dipakai.
 2. Sesuaikan path endpoint di `lib/data/remote/api_endpoints.dart` bila berbeda.
 3. Kontrak request/response ada di [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md),
    termasuk usulan tabel `sto_tag` & `sto_sequence`.
-
-## Data simulasi untuk pengujian
-
-Selama API belum ada, semua kebutuhan uji coba dilayani `MockStoApi`:
-
-- **Login**: NIK apa pun diterima (angka atau beralfabet seperti `A.10525`).
-  NIK contoh dengan nama lengkap: `A.10525`, `A.20431`, `11223344`.
-  NIK `0000` sengaja ditolak untuk menguji pesan error.
-- **Master part**: 38 part contoh - campuran FP dan WIP, lima customer
-  (ADM/TMMIN/HMSI/HPM/MMKI/SIM), area gudang & line produksi, plus tiga kasus
-  uji khusus (nama sangat panjang, lokasi/std pack kosong, std pack besar).
-- **Nomor tag**: counter di sisi "server" tiruan; matikan Wi-Fi/HP-nya untuk
-  menguji jalur nomor offline berawalan `L`.
-- **Riwayat tag**: Setting > Data & Cache > **Isi data contoh** membuat 8 tag
-  berawalan `DEMO` (3 tercetak & tersinkron, 2 draft, 2 dibatalkan, 1 tercetak
-  menunggu sinkron) sehingga filter status, badge sinkron, dan alur
-  "lanjutkan cetak" bisa diuji tanpa server. Bersihkan lewat
-  **Hapus seluruh data lokal**.
 
 ## Menjalankan
 
@@ -117,7 +99,7 @@ flutter run                 # pasang ke perangkat MPOS / HP Android
 flutter build apk --release # rilis
 ```
 
-Di emulator atau HP tanpa printer internal, aktifkan **Setting > Mode simulasi printer**
+Di emulator atau HP tanpa printer internal, aplikasi memakai printer simulasi sendiri
 (hasil cetak ditulis ke log, alur lain tetap sama).
 
 Pengujian:
@@ -192,12 +174,10 @@ Jadi preview bukan tiruan manual: kalau layout berubah, keduanya ikut berubah.
 - **Perangkat & pairing** - daftar perangkat beserta nomor aset dan NIK yang
   terpasang; pasang/lepas NIK, lepas semua saat event selesai, dan nonaktifkan
   perangkat yang hilang atau diperbaiki.
-- Sisanya seperti sebelumnya: alamat server, mode simulasi, cache master part,
-  data contoh, dan hapus data lokal.
+- Sisanya seperti sebelumnya: alamat server, cache master part, dan hapus
+  data lokal.
 
 Data contoh (master part, periode contoh, tag DEMO) otomatis **dibuang** begitu
-mode simulasi dimatikan - kalau tidak, periode contoh ikut terbaca sebagai event
-berjalan kedua dan master part contoh memakai kode area yang tidak dikenal
 server. Akun tidak ikut dibuang: di situlah hak akses menu tersimpan.
 
 Perangkat baru otomatis disemai admin bawaan (`E.9948`, `A.10525`) dan satu

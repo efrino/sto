@@ -89,6 +89,9 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  /// Lencana peran - bentuknya sama dengan yang dipakai di dalam percakapan.
+  Widget _lencanaPeran(bool admin) => _ChatRoomPageState._lencana(admin);
+
   Widget _baris(ChatThread t, String nik, {required bool admin}) {
     final judul = t.judulUntuk(nik);
     final kosong = t.lastId == 0;
@@ -103,11 +106,24 @@ class _ChatPageState extends State<ChatPage> {
           color: t.broadcast ? AppColors.accent : AppColors.navy,
         ),
       ),
-      title: Text(
-        judul,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              judul,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+          // Admin melihat banyak utas berisi NIK saja; peran pemiliknya
+          // ditandai supaya utas rekan admin tidak tertukar dengan utas
+          // operator yang sedang menunggu jawaban.
+          if (admin && t.labelPeran.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            _lencanaPeran(t.pemilikAdmin),
+          ],
+        ],
       ),
       subtitle: Text(
         kosong
@@ -340,13 +356,25 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             // NIK pengirim hanya ditulis untuk pesan orang lain - pada utas
             // admin, yang membalas bisa berganti-ganti orang.
             if (!milikSaya)
-              Text(
-                m.fromNik,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.navy,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    m.fromNik,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  // Operator hanya melihat NIK asing saat dibalas; penanda ini
+                  // yang memberitahunya bahwa jawaban itu datang dari orang
+                  // yang berwenang.
+                  if (m.dariAdmin) ...[
+                    const SizedBox(width: 6),
+                    _ChatRoomPageState._lencana(true),
+                  ],
+                ],
               ),
             Text(
               m.body,
@@ -411,6 +439,24 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       ),
     );
   }
+
+  /// Lencana peran pengirim/pemilik utas.
+  static Widget _lencana(bool admin) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: admin ? AppColors.accentSoft : AppColors.navySoft,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          admin ? 'ADMIN' : 'OPERATOR',
+          style: TextStyle(
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.4,
+            color: admin ? AppColors.accent : AppColors.navy,
+          ),
+        ),
+      );
 
   Widget _catatanBaca() => Container(
         width: double.infinity,

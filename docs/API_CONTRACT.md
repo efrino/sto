@@ -6,7 +6,7 @@ Ada **dua bagian** di dokumen ini:
    Sembilan endpoint, sudah dipakai `HttpStoApi`.
 2. **Bagian B - yang belum ada.** Fitur aplikasi yang endpoint-nya belum
    tersedia, lengkap dengan bentuk yang diusulkan. Selama belum ada, fitur itu
-   dilayani database lokal perangkat (dan `MockStoApi` bila mode simulasi
+   dilayani database lokal perangkat (mode simulasi sudah dibuang
    menyala).
 
 - Base URL: `http://192.168.10.67/majsf_rest_api/api` (bisa diubah di Setting)
@@ -186,7 +186,7 @@ Catatan penting dari skema `majsf_sto`:
 | Setting > User & izin | `user-list`, `register`, `user-update`, `user-delete` | **tanpa salinan lokal** - jaringan mati berarti daftarnya kosong dengan pesan, bukan data lama |
 | Setting > Perangkat & pairing | `device-*` + `user-list?id_device=` | daftar perangkat **dan** NIK terpasangnya dari server |
 | Setting > Perangkat & pairing | `device-list`, `device-create`, `device-update`, `device-delete` | nomor aset = kolom `name` di server; daftar NIK per perangkat masih catatan lokal karena belum ada endpointnya |
-| Login | `login` (+ `android_id`) | server yang memutuskan pemasangan; balasannya (`device_id`, `device_name`) disalin ke catatan perangkat lokal - penjaga lokal hanya dipakai mode simulasi |
+| Login | `login` (+ `android_id`) | server yang memutuskan pemasangan; balasannya (`device_id`, `device_name`) disalin ke catatan perangkat lokal |
 | Setting > Printer | `printer-setting` | jarak antar tag / jarak akhir / tarik mundur disimpan di tabel `printer_settings`; operator hanya bisa melihat |
 | Riwayat (tab STO, baris hitung) | `scan-history?nik=&q=` | hanya hasil hitung NIK yang login; pencarian dilakukan server atas seluruh riwayat |
 | Batal Tag (tab Pengajuan) | `cancel-requests`, `cancel-approve`, `cancel-reject` | antrean & keputusan langsung ke server, tanpa antrean lokal |
@@ -194,7 +194,7 @@ Catatan penting dari skema `majsf_sto`:
 | Siapkan Tag | `event-list` | event berjalan ditarik saat halaman dibuka dan sebelum tag dibuat, untuk operator maupun admin |
 
 Keduanya hanya menyentuh server bila yang membuka adalah **admin** dan toggle
-**Setting > Gunakan data simulasi** dimatikan. Bila server tidak terjangkau,
+server terjangkau. Bila tidak,
 halaman tetap terisi dari cache dan memasang pemberitahuan "diambil dari cache".
 
 ---

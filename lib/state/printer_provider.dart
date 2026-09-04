@@ -91,7 +91,23 @@ class PrinterProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sebab printer belum siap, dalam kalimat yang bisa ditindaklanjuti.
+  /// Null berarti tidak ada yang perlu diberitahukan.
+  String? _sebabGagal;
+  String? get sebabGagal => _sebabGagal;
+
   Future<void> bootstrap() async {
+    // Izin diminta lebih dulu, selagi splash masih di layar. Sebelumnya izin
+    // baru diminta saat printer dicari, sehingga pada pemasangan baru dialog
+    // izin muncul bersamaan dengan perpindahan halaman dan sering terlewat -
+    // akibatnya printer terlihat "tidak terdeteksi" padahal hanya belum
+    // diizinkan.
+    try {
+      await _service.ensurePermissions();
+    } catch (_) {
+      // Bukan alasan menghentikan bootstrap.
+    }
+
     _paperSize = await _prefs.paperSize();
     _autoConnect = await _prefs.autoConnectPrinter();
     await _prefs.bersihkanSetelanJarakLama();
@@ -118,12 +134,13 @@ class PrinterProvider extends ChangeNotifier {
         await connect(_selected!, silent: true);
       }
     } else if (_autoConnect) {
-      // Belum pernah memilih printer: coba temukan printer internal sendiri
-      // (sekaligus memunculkan permintaan izin Bluetooth sejak awal).
+      // Belum pernah memilih printer: coba temukan printer internal sendiri.
       try {
         await ensureReady();
-      } catch (_) {
-        // Diamkan - status printer tetap tampil di dashboard.
+      } catch (e) {
+        // Sebabnya disimpan, bukan ditelan: "printer tidak terdeteksi" tanpa
+        // keterangan adalah keluhan yang paling sering datang dari lapangan.
+        _sebabGagal = '$e';
       }
     }
     notifyListeners();
@@ -141,10 +158,24 @@ class PrinterProvider extends ChangeNotifier {
           _devices.firstOrNull;
     } catch (e) {
       _error = e.toString();
+      _sebabGagal = e.toString();
     } finally {
       _busy = false;
       notifyListeners();
     }
+  }
+
+  /// Mencoba lagi dari awal - dipakai saat operator mengetuk kartu printer.
+  Future<void> cobaLagi() async {
+    _sebabGagal = null;
+    notifyListeners();
+    try {
+      await _service.ensurePermissions();
+      await ensureReady();
+    } catch (e) {
+      _sebabGagal = '$e';
+    }
+    notifyListeners();
   }
 
   Future<bool> connect(PrinterDevice device, {bool silent = false}) async {

@@ -43,9 +43,8 @@ class ApiConfirmRequiredException extends ApiException {
   ApiConfirmRequiredException(super.message);
 }
 
-/// Kontrak API aplikasi. Ada dua implementasi:
-/// - [HttpStoApi]  : backend MAJSF (`api/Sto.php`) di 192.168.10.67
-/// - [MockStoApi]  : data tiruan, dipakai saat mode simulasi menyala
+/// Kontrak API aplikasi. Satu implementasi: [HttpStoApi], backend MAJSF
+/// (`api/Sto.php`) di 192.168.10.67.
 abstract class StoApi {
   /// [deviceId] = `devices.id` di server. Bila dikirim, backend sekaligus
   /// memasangkan NIK ini ke perangkat tersebut (`users.device_id`), jadi
@@ -135,7 +134,7 @@ abstract class StoApi {
 
   /// Detail tag untuk halaman scan - dipakai bila tagnya dicetak perangkat
   /// lain sehingga tidak ada di database lokal. null = tidak ditemukan.
-  Future<Map<String, dynamic>?> fetchTagDetail(String tagNo);
+  Future<Map<String, dynamic>?> fetchTagDetail(String tagNo, {String? nik});
 
   /// Mengirim hasil hitung STO: { nik, tag_no, tim, qty }.
   Future<void> submitCount(Map<String, dynamic> payload);
@@ -929,16 +928,69 @@ class HttpStoApi implements StoApi {
   }
 
   @override
-  Future<Map<String, dynamic>?> fetchTagDetail(String tagNo) async {
-    // Riwayat scan adalah satu-satunya cara melihat tag milik perangkat lain,
-    // dan hanya memuat tag yang sudah pernah dihitung.
-    final body = await _client.get(ApiEndpoints.scanHistory, query: {
-      'id_tag': tagNo,
-      'limit': 1,
-    });
-    final rows = _rows(body);
-    if (rows.isEmpty) return null;
-    return rows.first;
+  Future<Map<String, dynamic>?> fetchTagDetail(String tagNo, {String? nik}) async {
+    final cleanTag = tagNo.trim();
+    if (cleanTag.isEmpty) return null;
+
+    final queryNik = (nik ?? '').trim();
+
+    // 1. Endpoint resmi: GET /sto/tag-detail?id_tag=...
+    try {
+      final body = await _client.get(ApiEndpoints.tagDetail, query: {
+        'id_tag': cleanTag,
+        if (queryNik.isNotEmpty) 'nik': queryNik,
+      });
+      if (body is Map) {
+        final data = body['data'];
+        if (data is Map && data.isNotEmpty) {
+          return data.cast<String, dynamic>();
+        }
+        if (data is List && data.isNotEmpty) {
+          final first = data.first;
+          if (first is Map) return first.cast<String, dynamic>();
+        }
+        if (body.containsKey('id_tag') || body.containsKey('part_number')) {
+          return body.cast<String, dynamic>();
+        }
+      }
+    } catch (_) {
+      // Fallback bila /sto/tag-detail gagal (404 atau belum tersedia)
+    }
+
+    // 2. Fallback: Cari di riwayat cetak (print-history)
+    try {
+      final printBody = await _client.get(ApiEndpoints.printHistory, query: {
+        if (queryNik.isNotEmpty) 'nik': queryNik,
+        'q': cleanTag,
+        'limit': '5',
+      });
+      final printRows = _rows(printBody);
+      final exact = printRows.firstWhere(
+        (r) =>
+            '${r['id_tag'] ?? r['tag_no'] ?? ''}'.trim().toUpperCase() ==
+            cleanTag.toUpperCase(),
+        orElse: () =>
+            printRows.isNotEmpty ? printRows.first : const <String, dynamic>{},
+      );
+      if (exact.isNotEmpty) return exact;
+    } catch (_) {
+      // Fallback bila print-history gagal / offline
+    }
+
+    // 3. Fallback: Cari di riwayat scan (scan-history)
+    try {
+      final body = await _client.get(ApiEndpoints.scanHistory, query: {
+        if (queryNik.isNotEmpty) 'nik': queryNik,
+        'id_tag': cleanTag,
+        'limit': '1',
+      });
+      final rows = _rows(body);
+      if (rows.isNotEmpty) return rows.first;
+    } catch (_) {
+      // Abaikan error
+    }
+
+    return null;
   }
 
   @override

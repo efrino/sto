@@ -112,11 +112,9 @@ class StoPrepApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => SettingsProvider(
             prefs: deps.prefs,
-            api: deps.api,
             partRepository: deps.partRepository,
             database: deps.database,
             sound: deps.sound,
-            demoSeeder: deps.demoSeeder,
           ),
         ),
       ],

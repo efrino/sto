@@ -30,6 +30,9 @@ class _PrinterPalsu implements PrinterService {
       PrinterDevice(name: nama, address: 'palsu:$nama', isBuiltIn: true);
 
   @override
+  Future<void> ensurePermissions() async {}
+
+  @override
   Future<bool> isAvailable() async => true;
 
   @override

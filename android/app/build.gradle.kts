@@ -1,8 +1,35 @@
+import java.io.File
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Kunci penandatangan dibaca dari android/key.properties - berkas itu berisi
+// kata sandi keystore, jadi TIDAK ikut masuk git (lihat android/.gitignore).
+// Contoh isinya ada di android/key.properties.example.
+val berkasKunci = rootProject.file("key.properties")
+val kunci = Properties().apply {
+    if (berkasKunci.exists()) {
+        FileInputStream(berkasKunci).use { load(it) }
+    }
+}
+val adaKunci = berkasKunci.exists()
+
+/** Nilai wajib dari key.properties; kosong = build dihentikan dengan pesan jelas. */
+fun kunciWajib(nama: String): String {
+    val nilai = kunci.getProperty(nama)?.trim().orEmpty()
+    if (nilai.isEmpty()) {
+        throw GradleException(
+            "android/key.properties ada tetapi \"$nama\" kosong. " +
+                "Lengkapi keyAlias, keyPassword, storeFile, dan storePassword."
+        )
+    }
+    return nilai
 }
 
 android {
@@ -25,21 +52,86 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.maj.sto_prep"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (adaKunci) {
+            create("release") {
+                keyAlias = kunciWajib("keyAlias")
+                keyPassword = kunciWajib("keyPassword")
+                storePassword = kunciWajib("storePassword")
+
+                // storeFile boleh jalur mutlak (keystore disimpan di luar repo -
+                // ini yang dianjurkan) maupun relatif terhadap folder android/.
+                val jalur = kunciWajib("storeFile")
+                val berkas = File(jalur).let {
+                    if (it.isAbsolute) it else rootProject.file(jalur)
+                }
+                if (!berkas.exists()) {
+                    throw GradleException(
+                        "Keystore tidak ditemukan di ${berkas.absolutePath}. " +
+                            "Periksa storeFile pada android/key.properties."
+                    )
+                }
+                storeFile = berkas
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Tanpa keystore, build release TIDAK dilanjutkan.
+            //
+            // Sebelumnya di sini dipakai kunci debug supaya `flutter run
+            // --release` jalan. Untuk aplikasi yang dipasang di handheld
+            // lapangan itu berbahaya: kunci debug dibuat per-komputer, jadi
+            // versi berikutnya yang dibangun dari mesin lain tidak bisa dipasang
+            // sebagai pembaruan - handheld harus di-uninstall dulu, dan antrean
+            // kiriman yang belum sampai server ikut hilang. Kunci debug juga
+            // kedaluwarsa setahun sekali.
+            //
+            // Lebih baik gagal di sini, di meja, daripada ketahuan saat 30
+            // handheld menolak pembaruan.
+            signingConfig = if (adaKunci) signingConfigs.getByName("release") else null
+        }
+    }
+}
+
+// Pesan yang menuntun, bukan sekadar "signing config not found".
+if (!adaKunci) {
+    gradle.taskGraph.whenReady {
+        val adaTugasRelease = allTasks.any {
+            it.name.contains("Release") && (
+                it.name.startsWith("assemble") ||
+                    it.name.startsWith("bundle") ||
+                    it.name.startsWith("package")
+                )
+        }
+        if (adaTugasRelease) {
+            throw GradleException(
+                """
+                Build release dihentikan: android/key.properties belum ada.
+
+                1. Buat keystore (SIMPAN DI LUAR repo, dan cadangkan - kehilangan
+                   berkas ini berarti aplikasi tidak bisa diperbarui lagi):
+
+                   keytool -genkey -v -keystore D:/kunci/sto-prep.jks \
+                     -keyalg RSA -keysize 2048 -validity 10000 -alias sto-prep
+
+                2. Salin android/key.properties.example menjadi
+                   android/key.properties, lalu isi sesuai keystore tadi.
+
+                3. Ulangi: flutter build apk --release
+
+                Untuk sekadar mencoba di perangkat tanpa keystore, pakai
+                `flutter run` (debug) atau `flutter build apk --debug`.
+                """.trimIndent()
+            )
         }
     }
 }

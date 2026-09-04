@@ -9,6 +9,7 @@ import '../../core/widgets/section_card.dart';
 import '../../data/models/app_user.dart';
 import '../../data/models/print_entry.dart';
 import '../../state/chat_provider.dart';
+import '../../state/admin_provider.dart';
 import '../../state/count_provider.dart';
 import '../../state/prepare_provider.dart';
 import '../../state/print_history_provider.dart';
@@ -38,6 +39,15 @@ class _HomePageState extends State<HomePage> {
     await context.read<CountProvider>().load(
       user: context.read<SessionProvider>().user,
     );
+    if (!mounted) return;
+
+    // Event berjalan ditarik dari server di sini, bukan menunggu operator
+    // membuka menu Siapkan. Splash berjalan SEBELUM login, jadi saat itu
+    // belum ada NIK yang bisa dipakai bertanya - akibatnya event baru muncul
+    // setelah masuk menu, dan operator mengira eventnya belum dibuka.
+    await context.read<AdminProvider>().refreshActiveEvent(
+          pengakses: context.read<SessionProvider>().user,
+        );
     if (!mounted) return;
 
     // Angka cetak diambil dari server supaya sama dengan yang dilihat admin,
@@ -253,7 +263,13 @@ class _HomePageState extends State<HomePage> {
 
   Widget _printerCard(PrinterProvider printer) {
     final connected = printer.isConnected;
-    return SectionCard(
+    // Kartu bisa diketuk untuk mencoba lagi - pada pemasangan baru, printer
+    // biasanya "tidak terdeteksi" hanya karena izin Bluetooth belum diberikan,
+    // dan ketukan ini memunculkan permintaan izinnya lagi.
+    return InkWell(
+      onTap: connected || printer.busy ? null : () => printer.cobaLagi(),
+      borderRadius: BorderRadius.circular(14),
+      child: SectionCard(
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
@@ -291,6 +307,25 @@ class _HomePageState extends State<HomePage> {
                     color: AppColors.textPrimary,
                   ),
                 ),
+                // Sebab kegagalan ditulis apa adanya. "Printer belum
+                // tersambung" tanpa keterangan membuat operator menyangka
+                // printernya rusak, padahal biasanya hanya izin yang kurang.
+                if (!connected && printer.sebabGagal != null)
+                  Text(
+                    printer.sebabGagal!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.3,
+                      color: AppColors.warning,
+                    ),
+                  )
+                else if (!connected)
+                  const Text(
+                    'Ketuk untuk mencoba menyambung',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
               ],
             ),
           ),
@@ -298,12 +333,19 @@ class _HomePageState extends State<HomePage> {
           // Setting, dan angkanya berlaku untuk semua handheld. Yang
           // dibutuhkan operator di halaman utama hanya tahu printernya siap
           // atau tidak.
-          Icon(
-            connected ? Icons.check_circle : Icons.error_outline,
-            size: 20,
-            color: connected ? AppColors.success : AppColors.warning,
-          ),
+          printer.busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  connected ? Icons.check_circle : Icons.refresh,
+                  size: 20,
+                  color: connected ? AppColors.success : AppColors.warning,
+                ),
         ],
+      ),
       ),
     );
   }
@@ -409,7 +451,8 @@ class _HomePageState extends State<HomePage> {
       // Tidak ada lagi tombol sinkron di sini: hasil scan dan keadaan cetak
       // dikirim ke server begitu terjadi, jadi angka di kartu ini memang
       // sudah yang terbaru - tombol sinkron hanya menyiratkan sebaliknya.
-      subtitle: 'Langsung dari server',
+      subtitle: context.watch<AdminProvider>().activeEvent?.name ??
+          'Langsung dari server',
       icon: Icons.insights,
       child: Row(
         children: [

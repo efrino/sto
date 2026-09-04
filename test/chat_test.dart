@@ -49,6 +49,52 @@ void main() {
     });
   });
 
+  group('Penanda peran', () {
+    test('pesan dari admin ditandai, dari operator tidak', () {
+      ChatMessage dari(Object? flag) => ChatMessage.fromServer({
+            'id': 1,
+            'thread': 'M.9276',
+            'from_nik': 'F.9964',
+            'body': 'halo',
+            'from_admin': flag,
+            'created_at': '2026-09-04 13:00:00',
+          });
+
+      expect(dari(1).dariAdmin, isTrue);
+      expect(dari('1').dariAdmin, isTrue);
+      expect(dari(0).dariAdmin, isFalse);
+      // Baris lama tanpa kolom itu tidak boleh terbaca sebagai admin -
+      // menandai orang sebagai berwenang padahal bukan lebih berbahaya
+      // daripada tidak menandai sama sekali.
+      expect(dari(null).dariAdmin, isFalse);
+    });
+
+    test('peran datang dari server, bukan ditebak dari pola NIK', () {
+      // NIK admin dan operator sama bentuknya; satu-satunya sumber yang sah
+      // adalah kolom role di server.
+      final operator = ChatMessage.fromServer({
+        'id': 2,
+        'from_nik': 'F.9964',
+        'body': 'x',
+        'from_admin': 0,
+        'created_at': '2026-09-04 13:00:00',
+      });
+      expect(operator.dariAdmin, isFalse);
+    });
+
+    test('label peran utas mengikuti pemiliknya', () {
+      const utasAdmin = ChatThread(thread: 'F.9964', pemilikAdmin: true);
+      const utasOperator = ChatThread(thread: 'M.9276');
+      const pengumuman =
+          ChatThread(thread: ChatThread.broadcastKey, broadcast: true);
+
+      expect(utasAdmin.labelPeran, 'Admin');
+      expect(utasOperator.labelPeran, 'Operator');
+      // Utas pengumuman bukan milik seorang pun - tidak perlu label peran.
+      expect(pengumuman.labelPeran, isEmpty);
+    });
+  });
+
   group('Penamaan utas', () {
     test('utas sendiri diberi nama Admin, bukan NIK sendiri', () {
       const t = ChatThread(thread: 'M.9276');

@@ -1,7 +1,6 @@
 import '../local/prefs_store.dart';
 import '../local/user_dao.dart';
 import '../models/app_user.dart';
-import '../remote/api_client.dart';
 import '../remote/api_gateway.dart';
 import 'device_repository.dart';
 

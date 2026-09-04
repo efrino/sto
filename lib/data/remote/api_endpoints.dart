@@ -46,6 +46,9 @@ class ApiEndpoints {
   /// -> satu tag baru (satu panggilan = satu tag)
   static const String printTag = '/sto/print-tag';
 
+  /// GET ?id_tag= -> detail satu tag (sto_data + master_data)
+  static const String tagDetail = '/sto/tag-detail';
+
   /// GET  ?nik=&id_tag_ok=   -> satu Tag OK beserta keadaannya
   static const String tagOk = '/sto/tag-ok';
 

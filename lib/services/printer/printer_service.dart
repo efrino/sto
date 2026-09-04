@@ -60,6 +60,13 @@ class PrinterException implements Exception {
 abstract class PrinterService {
   PrinterState get state;
 
+  /// Meminta izin runtime yang dibutuhkan jalur printer ini.
+  ///
+  /// Dipanggil sejak splash, saat layar masih diam: kalau dialog izin baru
+  /// muncul di tengah operator menekan Cetak, ia sudah telanjur mengira
+  /// printernya rusak. Jalur yang tidak butuh izin membiarkannya kosong.
+  Future<void> ensurePermissions() async {}
+
   PrinterDevice? get currentDevice;
 
   Future<bool> isAvailable();

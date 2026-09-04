@@ -23,6 +23,9 @@ class MockPrinterService implements PrinterService {
   PrinterDevice? get currentDevice => _device;
 
   @override
+  Future<void> ensurePermissions() async {}
+
+  @override
   Future<bool> isAvailable() async => true;
 
   /// Dipakai halaman Setting untuk melatih alur kertas habis tanpa printer.

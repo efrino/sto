@@ -8,8 +8,6 @@ import '../../core/utils/formatters.dart';
 import '../../core/widgets/app_feedback.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/section_card.dart';
-import '../../services/printer/bluetooth_printer_service.dart';
-import '../../services/printer/mock_printer_service.dart';
 import '../../state/admin_provider.dart';
 import '../../state/printer_provider.dart';
 import '../../state/session_provider.dart';
@@ -83,45 +81,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
 
-  Future<void> _togglePrinterSimulation(
-    SettingsProvider settings,
-    PrinterProvider printer,
-    bool value,
-  ) async {
-    await settings.setPrinterSimulation(value);
-    await printer.forgetPrinter();
-    printer.swapService(
-      value ? MockPrinterService() : BluetoothPrinterService(),
-    );
-    if (!mounted) return;
-    AppFeedback.info(
-      context,
-      value
-          ? 'Mode simulasi aktif - hasil cetak hanya ditulis ke log.'
-          : 'Mode printer nyata aktif. Pilih ulang printer di menu Printer.',
-    );
-  }
-
-  Future<void> _seedDemo(SettingsProvider settings) async {
-    final user = context.read<SessionProvider>().user;
-    if (user == null) return;
-
-    final ok = await AppFeedback.confirm(
-      context,
-      title: 'Buat data contoh?',
-      message:
-          'Menambah 8 tag uji coba bernomor awalan DEMO (3 sudah dicetak, '
-          '2 draft, 2 dibatalkan, 1 tercetak menunggu sinkron). Data ini hanya '
-          'tersimpan di perangkat dan bisa dihapus lewat "Hapus seluruh data lokal".',
-      confirmLabel: 'Buat',
-    );
-    if (!ok || !mounted) return;
-
-    await settings.seedDemoData(user);
-    if (!mounted) return;
-    AppFeedback.info(context, settings.message ?? 'Selesai.');
-    settings.clearMessage();
-  }
 
   Future<void> _wipe(SettingsProvider settings) async {
     final ok = await AppFeedback.confirm(
@@ -204,7 +163,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 14),
           SectionCard(
             title: 'Server & API',
-            subtitle: 'Endpoint STO sudah aktif; matikan simulasi untuk memakainya',
+            subtitle: 'Alamat server yang dipakai aplikasi ini',
             icon: Icons.dns_outlined,
             child: Column(
               children: [
@@ -217,26 +176,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       .firstOrNull ??
                       settings.baseUrl,
                   onTap: () => _editBaseUrl(settings),
-                ),
-                const Divider(height: 20),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: settings.useMock,
-                  onChanged: (value) async {
-                    await settings.setUseMock(value);
-                    if (!context.mounted) return;
-                    AppFeedback.info(
-                      context,
-                      value
-                          ? 'Aplikasi memakai data simulasi.'
-                          : 'Aplikasi memanggil API server.',
-                    );
-                  },
-                  title: const Text('Gunakan data simulasi'),
-                  subtitle: const Text(
-                    'Matikan setelah endpoint STO Preparation tersedia.',
-                    style: TextStyle(fontSize: 12),
-                  ),
                 ),
               ],
             ),
@@ -293,17 +232,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   onChanged: printer.setAutoConnect,
                   title: const Text('Sambung otomatis saat aplikasi dibuka'),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: settings.printerSimulation,
-                  onChanged: (value) =>
-                      _togglePrinterSimulation(settings, printer, value),
-                  title: const Text('Mode simulasi printer'),
-                  subtitle: const Text(
-                    'Untuk emulator / HP tanpa printer internal.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
               ],
             ),
           ),
@@ -349,23 +277,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     settings.clearMessage();
                   },
                 ),
-                if (settings.useMock) ...[
-                  const Divider(height: 20),
-                  _tile(
-                    icon: Icons.science_outlined,
-                    title: 'Isi data contoh',
-                    subtitle:
-                        'Riwayat tag uji coba (cetak / draft / batal), awalan DEMO',
-                    trailing: settings.busy
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.add, color: AppColors.navy),
-                    onTap: settings.busy ? null : () => _seedDemo(settings),
-                  ),
-                ],
                 const Divider(height: 20),
                 _tile(
                   icon: Icons.delete_forever_outlined,

@@ -2,14 +2,14 @@ import '../local/count_dao.dart';
 import '../local/outbox_dao.dart';
 import '../local/tag_dao.dart';
 import '../models/app_user.dart';
+import '../models/part_item.dart';
 import '../models/sto_count.dart';
 import '../models/sto_tag.dart';
 import '../remote/api_client.dart';
 import '../remote/api_gateway.dart';
 
 /// Detail tag yang dipakai halaman scan: dari database lokal bila tagnya
-/// dicetak di perangkat ini, atau dari server (sementara data tiruan) bila
-/// dicetak perangkat lain.
+/// dicetak di perangkat ini, atau dari server bila dicetak perangkat lain.
 class ScannedTag {
   const ScannedTag({
     required this.tagNo,
@@ -73,18 +73,43 @@ class ScannedTag {
         status: tag.status,
       );
 
-  factory ScannedTag.fromJson(String tagNo, Map<String, dynamic> json) =>
-      ScannedTag(
-        tagNo: (json['tag_no'] ?? tagNo).toString(),
-        partNumber: (json['part_number'] ?? '-').toString(),
-        jobNumber: (json['job_number'] ?? '-').toString(),
-        partName: (json['part_name'] ?? '-').toString(),
-        area: (json['area'] ?? '-').toString(),
-        partType: (json['part_type'] ?? 'FP').toString().toUpperCase(),
-        unit: (json['unit'] ?? 'PCS').toString(),
-        printedBy: (json['created_by'] ?? '-').toString(),
-        fromServer: true,
-      );
+  factory ScannedTag.fromJson(String tagNo, Map<String, dynamic> json) {
+    TagStatus? status;
+    final isCanceled = '${json['is_canceled'] ?? 0}' == '1';
+    final isPendingCancel = !isCanceled &&
+        (json['cancel_requested_at'] != null &&
+            '${json['cancel_requested_at']}'.trim().isNotEmpty);
+    final printStatus = '${json['print_status'] ?? ''}'.trim().toLowerCase();
+
+    if (isCanceled) {
+      status = TagStatus.cancelled;
+    } else if (isPendingCancel) {
+      status = TagStatus.pendingCancel;
+    } else if (printStatus == 'draft' || printStatus == 'error') {
+      status = TagStatus.draft;
+    } else if (printStatus == 'printed') {
+      status = TagStatus.printed;
+    }
+
+    return ScannedTag(
+      tagNo: (json['tag_no'] ?? json['id_tag'] ?? tagNo).toString(),
+      partNumber: (json['part_number'] ?? json['partno'] ?? '-').toString(),
+      jobNumber: (json['job_number'] ?? json['job_no'] ?? '-').toString(),
+      partName: (json['part_name'] ??
+              json['material_description'] ??
+              json['part_description'] ??
+              '-')
+          .toString(),
+      area: (json['area'] ?? '-').toString(),
+      partType: PartItem.normalizeType(
+        (json['part_type'] ?? json['type'] ?? 'FP').toString(),
+      ),
+      unit: (json['unit'] ?? json['uom'] ?? 'PCS').toString(),
+      printedBy: (json['created_by'] ?? json['printed_by'] ?? '-').toString(),
+      status: status,
+      fromServer: true,
+    );
+  }
 }
 
 /// Alur hitung STO: scan tag -> ambil detail part -> operator mengisi qty ->
@@ -103,13 +128,13 @@ class CountRepository {
   final ApiGateway api;
 
   /// Detail tag untuk halaman scan. Tag yang dicetak perangkat lain diambil
-  /// dari server; selama API belum ada, gateway mengembalikan data tiruan.
-  Future<ScannedTag?> lookup(String tagNo) async {
+  /// dari server (print-history atau scan-history).
+  Future<ScannedTag?> lookup(String tagNo, {String? nik}) async {
     final lokal = await tagDao.findByTagNo(tagNo);
     if (lokal != null) return ScannedTag.fromTag(lokal);
 
     try {
-      final json = await api.fetchTagDetail(tagNo);
+      final json = await api.fetchTagDetail(tagNo, nik: nik);
       if (json == null) return null;
       return ScannedTag.fromJson(tagNo, json);
     } catch (_) {

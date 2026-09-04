@@ -73,7 +73,8 @@ class CountProvider extends ChangeNotifier {
 
   /// Detail tag hasil scan: dari database lokal, atau dari server bila tagnya
   /// dicetak perangkat lain.
-  Future<ScannedTag?> lookup(String tagNo) => _repo.lookup(tagNo);
+  Future<ScannedTag?> lookup(String tagNo, {AppUser? user}) =>
+      _repo.lookup(tagNo, nik: (user ?? _user)?.nik);
 
   /// Catatan hitung tim user untuk tag tersebut (null bila belum ada).
   Future<StoCount?> myTeamCount(String tagNo, AppUser user) =>

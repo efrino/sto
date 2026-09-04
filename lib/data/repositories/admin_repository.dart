@@ -338,18 +338,4 @@ class AdminRepository {
     return [...AppConfig.areaSto, ...lain];
   }
 
-  static String _namaBulan(int month) => const [
-        'JANUARI',
-        'FEBRUARI',
-        'MARET',
-        'APRIL',
-        'MEI',
-        'JUNI',
-        'JULI',
-        'AGUSTUS',
-        'SEPTEMBER',
-        'OKTOBER',
-        'NOVEMBER',
-        'DESEMBER',
-      ][(month - 1).clamp(0, 11)];
 }

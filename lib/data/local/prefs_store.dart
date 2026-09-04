@@ -16,7 +16,6 @@ class PrefsStore {
   static const _kUser = 'active_user';
   static const _kRecentSearch = 'recent_search';
   static const _kBaseUrl = 'base_url';
-  static const _kUseMock = 'use_mock_api';
   static const _kPrinterAddress = 'printer_address';
   static const _kPrinterName = 'printer_name';
   static const _kPaperSize = 'paper_size';
@@ -84,17 +83,27 @@ class PrefsStore {
   Future<void> clearRecentSearch() async => (await _p).remove(_kRecentSearch);
 
   // ------------------------------------------------------------- setting
-  Future<String> baseUrl() async =>
-      (await _p).getString(_kBaseUrl) ?? AppConfig.defaultBaseUrl;
+  Future<String> baseUrl() async {
+    final tersimpan = (await _p).getString(_kBaseUrl);
+    if (tersimpan == null || tersimpan.isEmpty) return AppConfig.defaultBaseUrl;
+
+    // Alamat HTTPS sempat tersimpan tanpa akhiran '/api', sehingga SELURUH
+    // panggilan dijawab 404 - dan perangkat yang sudah menyimpannya tidak akan
+    // sembuh hanya karena daftar pilihannya diperbaiki. Dibetulkan di sini,
+    // saat dibaca, supaya tidak ada handheld yang tertinggal.
+    final bersih = tersimpan.trim().replaceAll(RegExp(r'/+$'), '');
+    for (final benar in AppConfig.serverPilihan.values) {
+      if (benar != bersih && benar.startsWith('$bersih/')) {
+        await setBaseUrl(benar);
+        return benar;
+      }
+    }
+    return bersih;
+  }
 
   Future<void> setBaseUrl(String value) async =>
       (await _p).setString(_kBaseUrl, value.trim());
 
-  Future<bool> useMockApi() async =>
-      (await _p).getBool(_kUseMock) ?? AppConfig.useMockApi;
-
-  Future<void> setUseMockApi(bool value) async =>
-      (await _p).setBool(_kUseMock, value);
 
   Future<String?> printerAddress() async => (await _p).getString(_kPrinterAddress);
 

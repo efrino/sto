@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sto_prep/data/models/app_user.dart';
-import 'package:sto_prep/data/remote/mock_sto_api.dart';
 
 /// Hak akses milik server. Dulu daftar kosong dari server diperlakukan sebagai
 /// "semua menu terbuka" - akibatnya admin mencabut semua centang, tersimpan
@@ -72,14 +71,6 @@ void main() {
       expect(sebelum.canScan, isFalse);
       expect(sesudah.canScan, isTrue);
       expect(sesudah.nik, sebelum.nik, reason: 'akun yang sama, izin berbeda');
-    });
-
-    test('login mode simulasi tidak mengarang izin', () async {
-      final api = MockStoApi();
-      final user = await api.login('A.10525');
-      // Apa pun isinya, yang penting bukan hasil tebakan "semua terbuka"
-      // untuk akun yang izinnya memang kosong.
-      expect(user.nik, 'A.10525');
     });
   });
   group('Izin Tag OK terpisah dari tag STO', () {

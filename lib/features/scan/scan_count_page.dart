@@ -50,7 +50,7 @@ class _ScanCountPageState extends State<ScanCountPage> {
       return;
     }
 
-    final tag = await counts.lookup(tagNo);
+    final tag = await counts.lookup(tagNo, user: user);
     if (!mounted) return;
 
     if (tag == null) {

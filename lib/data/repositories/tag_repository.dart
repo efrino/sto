@@ -1,5 +1,4 @@
 import '../../core/config/app_config.dart';
-import '../../services/sequence/tag_sequence_service.dart';
 import '../local/outbox_dao.dart';
 import '../local/tag_dao.dart';
 import '../models/app_user.dart';
@@ -7,7 +6,6 @@ import '../models/part_item.dart';
 import '../models/print_batch.dart';
 import '../models/sto_tag.dart';
 import '../remote/api_gateway.dart';
-import '../remote/sto_api.dart';
 
 /// Hasil pembuatan satu batch tag.
 class GeneratedBatch {
@@ -142,11 +140,6 @@ class TagRepository {
     );
   }
 
-  /// sqflite melaporkan pelanggaran UNIQUE lewat pesan teks.
-  static bool _isDuplicateTagNo(Object error) {
-    final message = error.toString().toUpperCase();
-    return message.contains('UNIQUE') && message.contains('TAG_NO');
-  }
 
   /// Dipanggil SETELAH printer selesai mencetak. Melempar
   /// [TagStateException] bila tag sudah pernah dicetak/dibatalkan.

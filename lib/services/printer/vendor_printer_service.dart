@@ -47,6 +47,9 @@ class VendorPrinterService implements PrinterService {
   Future<bool> get siap async => !_gagalPermanen && await isAvailable();
 
   @override
+  Future<void> ensurePermissions() async {}
+
+  @override
   Future<bool> isAvailable() async {
     if (_gagalPermanen) return false;
     try {

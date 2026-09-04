@@ -12,7 +12,7 @@ import '../local/app_database.dart';
 /// - seluruh master part (API belum punya endpoint master part, jadi apa pun
 ///   yang tersimpan di sini pasti data contoh),
 /// - event yang id-nya bukan angka (server memberi id numerik),
-/// - batch & tag contoh dari [DemoSeeder] (batch_id berawalan DEMO).
+/// - batch & tag contoh dari penyemai versi lama (batch_id berawalan DEMO).
 ///
 /// Akun TIDAK ikut dihapus: di situlah hak akses menu disimpan, dan
 /// menghapusnya bisa mengunci admin dari menu Setting.

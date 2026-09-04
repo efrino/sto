@@ -426,7 +426,7 @@ class _UserFormState extends State<_UserForm> {
               ],
               decoration: const InputDecoration(
                 labelText: 'NIK',
-                hintText: 'contoh: A.10525',
+                hintText: 'NIK karyawan',
               ),
             ),
             const SizedBox(height: 6),

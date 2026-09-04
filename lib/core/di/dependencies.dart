@@ -10,13 +10,11 @@ import '../../data/local/prefs_store.dart';
 import '../../data/local/tag_dao.dart';
 import '../../data/local/user_dao.dart';
 import '../../data/remote/api_gateway.dart';
-import '../../data/remote/mock_sto_api.dart';
 import '../../data/repositories/admin_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/cancel_repository.dart';
 import '../../data/repositories/count_repository.dart';
 import '../../data/repositories/device_repository.dart';
-import '../../data/repositories/demo_seeder.dart';
 import '../../data/repositories/part_repository.dart';
 import '../../data/repositories/pembersih_data_contoh.dart';
 import '../../data/repositories/sync_repository.dart';
@@ -27,7 +25,6 @@ import '../../services/printer/bluetooth_printer_service.dart';
 import '../../services/printer/mock_printer_service.dart';
 import '../../services/printer/vendor_printer_service.dart';
 import '../../services/printer/printer_service.dart';
-import '../../services/sequence/tag_sequence_service.dart';
 
 /// Perakitan dependensi aplikasi (tanpa package DI - cukup sekali di main).
 /// Memilih jalur printer untuk perangkat sungguhan.
@@ -73,7 +70,6 @@ class AppDependencies {
     required this.printerService,
     required this.printerFallback,
     required this.sound,
-    required this.demoSeeder,
   });
 
   final PrefsStore prefs;
@@ -99,8 +95,6 @@ class AppDependencies {
   final PrinterService Function()? printerFallback;
   final SoundService sound;
 
-  /// Pengisi data contoh selama API belum tersedia.
-  final DemoSeeder demoSeeder;
 
   static Future<AppDependencies> bootstrap() async {
     final prefs = PrefsStore.instance;
@@ -116,7 +110,6 @@ class AppDependencies {
       prefs: prefs,
       // Counter mock melanjutkan nomor tertinggi di database lokal, jadi nomor
       // tag tidak mengulang dari 1 setiap aplikasi dibuka.
-      mock: MockStoApi(lastUsedSequence: tagDao.lastSequenceForPrefix),
     );
 
     final deviceRepository = DeviceRepository(
@@ -124,21 +117,12 @@ class AppDependencies {
       identityService: DeviceIdentityService(prefs),
       api: api,
     );
-    await api.reloadSettings();
     await prefs.wipeLegacyNikHistory();
 
-    // Begitu aplikasi memakai API sungguhan, data contoh dibuang: event
-    // contoh akan terbaca sebagai event berjalan kedua, dan master part
-    // contoh memakai kode area yang tidak dikenal server.
-    if (!api.useMock) {
-      await PembersihDataContoh(database).bersihkan();
-    }
-
-    final sequenceService = TagSequenceService(
-      api: api,
-      prefs: prefs,
-      tagDao: tagDao,
-    );
+    // Sisa data contoh dari versi lama dibuang: event contoh terbaca sebagai
+    // event berjalan kedua, dan master part contoh memakai kode area yang
+    // tidak dikenal server.
+    await PembersihDataContoh(database).bersihkan();
 
     // Emulator / HP tanpa printer internal otomatis memakai simulasi.
     final simulation = await prefs.printerSimulation(
@@ -151,7 +135,6 @@ class AppDependencies {
     final tagRepository = TagRepository(
       tagDao: tagDao,
       outboxDao: outboxDao,
-      sequenceService: sequenceService,
       api: api,
     );
     final countRepository = CountRepository(
@@ -206,11 +189,6 @@ class AppDependencies {
       printerService: printer,
       printerFallback: _printerCadangan(printer),
       sound: SoundService(enabled: await prefs.soundEnabled()),
-      demoSeeder: DemoSeeder(
-        partRepository: partRepository,
-        tagDao: tagDao,
-        outboxDao: outboxDao,
-      ),
     );
   }
 }

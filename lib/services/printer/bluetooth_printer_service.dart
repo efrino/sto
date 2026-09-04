@@ -66,18 +66,28 @@ class BluetoothPrinterService implements PrinterService {
   ///
   /// Tidak melempar error di sini - biarkan panggilan aslinya yang gagal supaya
   /// pesan yang muncul sesuai kondisi nyata (mis. Bluetooth mati).
+  @override
   Future<void> ensurePermissions() async {
     if (!Platform.isAndroid) return;
     try {
-      await [
+      final hasil = await [
         Permission.bluetoothConnect,
         Permission.bluetoothScan,
         Permission.location,
       ].request();
+
+      // Android 12+ menolak getBondedDevices tanpa BLUETOOTH_CONNECT, dan
+      // penolakannya tidak berupa error - daftarnya sekadar kosong. Jadi
+      // keadaan izin dicatat, supaya layar bisa mengatakan sebab yang benar
+      // alih-alih "printer tidak ditemukan".
+      izinDitolak = hasil[Permission.bluetoothConnect]?.isGranted == false;
     } catch (_) {
       // Perangkat lama tidak mengenal izin baru - abaikan.
     }
   }
+
+  /// true bila izin Bluetooth ditolak pada permintaan terakhir.
+  bool izinDitolak = false;
 
   /// Bluetooth yang mati adalah sebab kegagalan yang paling sering di
   /// lapangan, dan pluginnya hanya melempar `java.io.IOException` tanpa
@@ -114,7 +124,7 @@ class BluetoothPrinterService implements PrinterService {
         const Duration(seconds: 12),
         onTimeout: () => throw PrinterException(
           'Printer tidak terbaca karena izin belum lengkap. Buka Setelan > '
-          'Aplikasi > STO Prep > Izin: aktifkan "Perangkat di sekitar" dan '
+          'Aplikasi > STO > Izin: aktifkan "Perangkat di sekitar" dan '
           'Lokasi (pilih "Lokasi tepat"), lalu coba lagi.',
         ),
       );
@@ -160,7 +170,7 @@ class BluetoothPrinterService implements PrinterService {
       if (message.contains('permission')) {
         throw PrinterException(
           'Izin Bluetooth/Lokasi belum diberikan. Buka Setelan > Aplikasi > '
-          'STO Prep > Izin, lalu aktifkan Perangkat di sekitar dan Lokasi.',
+          'STO > Izin, lalu aktifkan Perangkat di sekitar dan Lokasi.',
         );
       }
       throw PrinterException(

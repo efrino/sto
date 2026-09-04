@@ -2,8 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sto_prep/core/config/app_config.dart';
 import 'package:sto_prep/data/models/part_item.dart';
-import 'package:sto_prep/data/remote/api_client.dart';
-import 'package:sto_prep/data/remote/mock_sto_api.dart';
 import 'package:sto_prep/data/models/sto_tag.dart';
 import 'package:sto_prep/services/printer/label_builder.dart';
 import 'package:sto_prep/services/printer/label_document.dart';
@@ -22,55 +20,6 @@ void main() {
       final tagNo = TagSequenceService.formatTagNo('STO260902', 123);
       expect(tagNo, 'STO260902-000123');
       expect(tagNo.split('-').last.length, AppConfig.sequencePadding);
-    });
-  });
-
-  group('Login NIK', () {
-    final api = MockStoApi();
-
-    test('menerima NIK beralfabet seperti A.10525', () async {
-      final user = await api.login('A.10525');
-      expect(user.nik, 'A.10525');
-      expect(user.name, isNotEmpty);
-    });
-
-    test('NIK huruf kecil dinormalkan jadi huruf besar', () async {
-      final user = await api.login(' a.10525 ');
-      expect(user.nik, 'A.10525');
-    });
-
-    test('NIK numerik lama tetap bisa masuk', () async {
-      final user = await api.login('11223344');
-      expect(user.nik, '11223344');
-    });
-
-    test('NIK kosong ditolak', () {
-      expect(() => api.login('   '), throwsA(isA<ApiException>()));
-    });
-  });
-
-  group('Nomor urut simulasi', () {
-    test('lanjut dari nomor terakhir di perangkat, bukan mulai dari 1', () async {
-      // Perangkat sudah punya tag ...-000005 dari sesi sebelumnya.
-      final api = MockStoApi(lastUsedSequence: (prefix) async => 5);
-
-      final pertama =
-          await api.reserveSequence(qty: 2, area: 'WAREHOUSE 1', nik: 'A.10525');
-      expect(pertama.start, 6);
-      expect(pertama.end, 7);
-
-      final kedua =
-          await api.reserveSequence(qty: 1, area: 'WAREHOUSE 1', nik: 'A.10525');
-      expect(kedua.start, 8);
-      expect(kedua.prefix, pertama.prefix);
-    });
-
-    test('tanpa data lokal tetap mulai dari 1', () async {
-      final api = MockStoApi();
-      final hasil =
-          await api.reserveSequence(qty: 3, area: 'AREA', nik: 'A.10525');
-      expect(hasil.start, 1);
-      expect(hasil.end, 3);
     });
   });
 

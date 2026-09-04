@@ -133,7 +133,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   decoration: const InputDecoration(
                     labelText: 'NIK',
-                    hintText: 'contoh: A.10525 atau 11223344',
                     prefixIcon: Icon(Icons.badge_outlined),
                   ),
                   validator: (value) {

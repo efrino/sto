@@ -1,0 +1,29 @@
+# Contoh isi android/key.properties
+#
+# Salin berkas ini menjadi `android/key.properties` lalu isi sesuai keystore
+# Anda. Berkas key.properties dan keystore-nya TIDAK ikut masuk git (lihat
+# android/.gitignore) - keduanya rahasia.
+#
+# Membuat keystore (sekali saja, untuk seumur hidup aplikasi ini):
+#
+#   keytool -genkey -v -keystore D:/kunci/sto-prep.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias sto-prep
+#
+# CADANGKAN berkas .jks dan kata sandinya di tempat aman. Kalau hilang, semua
+# handheld yang sudah terpasang harus di-uninstall lebih dulu sebelum bisa
+# menerima versi berikutnya - dan data yang belum terkirim ke server ikut
+# hilang bersamanya.
+
+# Nama alias yang dipakai saat membuat keystore (-alias).
+keyAlias=sto-prep
+
+# Kata sandi alias. Bila saat keytool bertanya Anda menekan Enter, isinya sama
+# dengan storePassword.
+keyPassword=GANTI_DENGAN_SANDI_ALIAS
+
+# Letak berkas keystore. Boleh jalur mutlak (dianjurkan - simpan di luar repo)
+# maupun relatif terhadap folder android/.
+storeFile=D:/kunci/sto-prep.jks
+
+# Kata sandi keystore (-storepass).
+storePassword=GANTI_DENGAN_SANDI_KEYSTORE
