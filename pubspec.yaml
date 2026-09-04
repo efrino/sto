@@ -1,0 +1,60 @@
+name: sto_prep
+description: "STO Preparation - persiapan & cetak tag STO (Blueprint MPOS 332)."
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management sederhana
+  provider: ^6.1.2
+
+  # Networking (API menyusul - lihat lib/core/config/app_config.dart)
+  http: ^1.6.0
+
+  # Caching / storage
+  shared_preferences: ^2.5.5
+  sqflite: ^2.4.1
+  path: ^1.9.0
+  path_provider: ^2.1.5
+
+  # Printing
+  blue_thermal_printer: ^1.2.3
+  qr_flutter: ^4.1.0
+
+  # Scan QR tag (kamera perangkat)
+  mobile_scanner: ^7.2.0
+
+  # Utilities
+  intl: ^0.20.2
+  permission_handler: ^12.0.0
+  audioplayers: ^6.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/icon-maj.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/icon-maj.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/sounds/
