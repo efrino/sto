@@ -506,3 +506,31 @@ APK ke puluhan handheld:
 
 Penolakannya memakai HTTP 429, bukan 400: keadaannya sementara, bukan
 permintaan yang salah bentuk.
+
+## Dari mana tag OK berasal
+
+`majsf_sto.tag_ok_data` bukan sumber tag, melainkan **catatan STO**: barisnya
+baru ada setelah seseorang menyiapkan tag itu. Sumber aslinya dua:
+
+| Jalur | Tabel sumber | Kelengkapan |
+| --- | --- | --- |
+| PRESS / IFPP | `majsf_inventory.table_sto_tag_ok` | lengkap (job number, qty kanban, project, customer, area) |
+| WELDING | `majsf_andon_welding.welding_production_tag_ok` | hanya identitas; job number & area dilengkapi dari `majsf_sto.master_data`, qty kanban ikut dari `tag-ok-prepare` |
+
+Keduanya **dibaca saja** - tabel itu milik sistem lain dan tidak pernah
+ditulis dari sini. Yang ditulis hanya `tag_ok_data`.
+
+Alurnya: menu Siapkan memanggil `GET /sto/tag-ok`; bila tagnya belum
+terdaftar, aplikasi mengambil detailnya lewat `GET /sto/tag-ok-prepare`
+(endpoint tim backend lain), lalu `POST /sto/tag-ok-open` mendaftarkan
+barisnya. Server memastikan sendiri tag itu memang terbit di salah satu tabel
+sumber sebelum mendaftarkan - keterangan dari aplikasi hanya menambal kolom
+yang tidak ada di sumbernya, tidak pernah menentukan keabsahan tag.
+
+Menu Hitung dan Batal sengaja tidak mencari ke sumber produksi: tag yang belum
+disiapkan memang belum boleh dihitung.
+
+**Dua deployment.** Server 67 (`majsf_rest_api`) dan mspin (`/sto`) menjalankan
+salinan kode yang berbeda; perubahan di 67 tidak otomatis sampai ke mspin,
+padahal aplikasi memakai HTTPS sebagai bawaan. Setiap perubahan endpoint STO
+harus disalin ke sana juga.
