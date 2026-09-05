@@ -12,6 +12,12 @@ class Formatters {
 
   static String dateTime(DateTime value) => _dateTime.format(value);
 
+  /// Bentuk waktu yang diterima API STO: "yyyy-MM-dd HH:mm:ss", tanpa zona.
+  /// Server dan handheld sama-sama di WIB, jadi tidak ada pengalihan zona -
+  /// mengirim ISO8601 dengan Z justru membuat jamnya melenceng tujuh jam.
+  static String serverDateTime(DateTime value) =>
+      DateFormat('yyyy-MM-dd HH:mm:ss').format(value);
+
   static String time(DateTime value) => _time.format(value);
 
   /// Format judul tag: 02/09/2026 10.50 AM

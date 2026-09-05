@@ -7,13 +7,27 @@ import 'package:http/http.dart' as http;
 import '../../core/config/app_config.dart';
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode, this.errors = const []});
+  ApiException(
+    this.message, {
+    this.statusCode,
+    this.errors = const [],
+    this.body,
+  });
 
   final String message;
   final int? statusCode;
 
   /// Daftar kesalahan validasi dari backend (field `errors`).
   final List<String> errors;
+
+  /// Badan response apa adanya. Penolakan tidak selalu berarti kegagalan:
+  /// 409 pada tag OK membawa baris yang sudah ada, atau daftar event yang
+  /// harus dipilih - keduanya perlu ditampilkan, bukan dibuang.
+  final Map<String, dynamic>? body;
+
+  /// true bila server menolak karena keadaan, bukan karena permintaannya
+  /// salah bentuk - layar menampilkannya sebagai keterangan, bukan galat.
+  bool get konflik => statusCode == 409;
 
   @override
   String toString() =>
@@ -276,6 +290,7 @@ class ApiClient {
           statusCode: httpStatus,
           errors: (body['errors'] as List?)?.map((e) => '$e').toList() ??
               const [],
+          body: Map<String, dynamic>.from(body),
         );
       }
     }

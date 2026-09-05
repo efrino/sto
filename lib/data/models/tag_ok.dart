@@ -30,6 +30,8 @@ class TagOk {
     this.qtyScan,
     this.scannedBy = '',
     this.scannedAt,
+    this.scanBy = '',
+    this.scanAt,
     this.batal = 0,
     this.cancelReason = '',
     this.canceledBy = '',
@@ -61,6 +63,11 @@ class TagOk {
   final int? qtyScan;
   final String scannedBy;
   final DateTime? scannedAt;
+
+  /// Jejak dari sistem produksi: kapan dan oleh siapa tag ini diterbitkan.
+  /// Berbeda dari [scannedBy]/[scannedAt], yang mencatat hasil hitung STO.
+  final String scanBy;
+  final DateTime? scanAt;
 
   /// Keadaan pembatalan mengikuti kesepakatan tabel: 0 normal,
   /// 1 dibatalkan, 2 menunggu keputusan admin.
@@ -124,6 +131,8 @@ class TagOk {
       qtyScan: int.tryParse('${json['qty_scan'] ?? ''}'),
       scannedBy: '${json['scanned_by'] ?? ''}',
       scannedAt: waktu(json['scanned_at']),
+      scanBy: '${json['scan_by'] ?? ''}',
+      scanAt: waktu(json['scan_at']),
       batal: int.tryParse('${json['is_canceled'] ?? 0}') ?? 0,
       cancelReason: '${json['cancel_reason'] ?? ''}',
       canceledBy: '${json['canceled_by'] ?? ''}',

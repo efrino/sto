@@ -5,6 +5,7 @@ import '../models/pengajuan_batal.dart';
 import '../models/print_entry.dart';
 import '../models/sto_count.dart';
 import '../../core/config/app_config.dart';
+import '../../core/utils/formatters.dart';
 import '../models/chat_message.dart';
 import '../models/sto_tag.dart';
 import '../models/tag_ok.dart';
@@ -181,6 +182,20 @@ abstract class StoApi {
   /// Detail tag dari sumber produksi, untuk tag yang belum terdaftar pada
   /// STO. Melempar [ApiException] bila tagnya memang tidak ada.
   Future<TagOk> fetchTagOkPrepare(String nik, String idTagOk);
+
+  /// Menyiapkan Tag OK sekali panggil: mendaftarkan barisnya sekaligus
+  /// menandainya siap dihitung.
+  ///
+  /// [area] dipilih petugas - server tidak menebaknya. [idEvent] boleh null
+  /// selama hanya ada satu event berjalan; bila ada beberapa, server menolak
+  /// dengan 409 beserta daftar `events` untuk dipilih.
+  Future<TagOk> prepareTagOk({
+    required String nik,
+    required String idTagOk,
+    required String area,
+    int? idEvent,
+    DateTime? scanAt,
+  });
 
   /// Menyiapkan Tag OK: menandainya siap dihitung.
   ///
@@ -1140,6 +1155,25 @@ class HttpStoApi implements StoApi {
       );
       return _tagOkDari(cadangan);
     }
+  }
+
+  @override
+  Future<TagOk> prepareTagOk({
+    required String nik,
+    required String idTagOk,
+    required String area,
+    int? idEvent,
+    DateTime? scanAt,
+  }) async {
+    final waktu = scanAt ?? DateTime.now();
+    final body = await _client.post(ApiEndpoints.tagOkPrepare, {
+      'nik': nik,
+      'id_tag_ok': idTagOk,
+      'area': area,
+      'id_event': ?idEvent,
+      'scan_at': Formatters.serverDateTime(waktu),
+    });
+    return _tagOkDari(body);
   }
 
   @override

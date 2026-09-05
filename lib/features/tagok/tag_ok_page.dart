@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/di/dependencies.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/scan_code.dart';
 import '../../core/widgets/app_feedback.dart';
 import '../../core/widgets/section_card.dart';
+import '../../data/models/app_user.dart';
 import '../../data/models/tag_ok.dart';
 import '../../state/session_provider.dart';
 import '../../state/tag_ok_provider.dart';
@@ -47,6 +49,9 @@ class _TagOkPageState extends State<TagOkPage> {
   final _qty = TextEditingController();
   bool _menangani = false;
 
+  /// Area yang dipilih petugas untuk tag yang sedang disiapkan.
+  String _area = '';
+
   @override
   void dispose() {
     _qty.dispose();
@@ -81,27 +86,117 @@ class _TagOkPageState extends State<TagOkPage> {
       // Qty kanban jadi angka awal - penghitung tinggal mengubahnya bila
       // isinya ternyata berbeda, dan itu justru selisih yang dicari saat STO.
       _qty.text = '${tag.qtyScan ?? tag.kanban ?? ''}';
+
+      // Area diisi dari tagnya bila dikenali; kalau tidak, petugas memilih
+      // sendiri - tombol Simpan mati sampai itu ditentukan.
+      final pilihan = _areaTersedia(user);
+      _area = pilihan.contains(tag.area) ? tag.area : '';
       await sound.success();
     } finally {
       if (mounted) setState(() => _menangani = false);
     }
   }
 
-  Future<void> _setujui(TagOk tag) async {
+  /// Area yang boleh dipilih: izin area user bila diatur admin, selain itu
+  /// seluruh area STO yang dikenal.
+  List<String> _areaTersedia(AppUser user) =>
+      user.areas.isEmpty ? AppConfig.areaSto : user.areas;
+
+  Widget _pilihArea() {
     final user = context.read<SessionProvider>().user;
-    if (user == null) return;
+    final pilihan = user == null ? AppConfig.areaSto : _areaTersedia(user);
+
+    return DropdownButton<String>(
+      value: _area.isEmpty ? null : _area,
+      hint: const Text('Pilih area', style: TextStyle(fontSize: 13)),
+      underline: const SizedBox.shrink(),
+      items: [
+        for (final a in pilihan)
+          DropdownMenuItem(
+            value: a,
+            child: Text(a, style: const TextStyle(fontSize: 13)),
+          ),
+      ],
+      onChanged: (nilai) => setState(() => _area = nilai ?? ''),
+    );
+  }
+
+  /// SIAPKAN: satu panggilan, mendaftarkan sekaligus membuka tag.
+  Future<void> _simpanSiapkan(TagOk tag, {int? idEvent}) async {
+    final user = context.read<SessionProvider>().user;
+    if (user == null || _area.isEmpty) return;
 
     final tagok = context.read<TagOkProvider>();
-    final ok = await tagok.siapkan(user, tag.idTagOk);
+    final ok = await tagok.siapkanBaru(
+      user,
+      tag.idTagOk,
+      area: _area,
+      idEvent: idEvent,
+    );
     if (!mounted) return;
 
     if (ok) {
       AppFeedback.success(context, tagok.pesan ?? 'Tersimpan.');
+      tagok.bersihkanPesan();
       _lanjutTagBerikutnya();
-    } else {
-      AppFeedback.error(context, tagok.error ?? 'Gagal menyiapkan tag OK.');
+      return;
     }
+
+    // Beberapa event berjalan - petugas memilih, lalu permintaannya diulang.
+    if (tagok.pilihanEvent.isNotEmpty) {
+      final dipilih = await _pilihEvent(tagok.pilihanEvent);
+      if (dipilih == null || !mounted) return;
+      await _simpanSiapkan(tag, idEvent: dipilih);
+      return;
+    }
+
+    // Sudah disiapkan orang lain: keterangan, bukan kegagalan.
+    final lebihDulu = tagok.sudahDisiapkan;
+    if (lebihDulu != null) {
+      AppFeedback.info(
+        context,
+        '${tagok.error} '
+        '(${lebihDulu.scanBy.isEmpty ? lebihDulu.openedBy : lebihDulu.scanBy}'
+        '${lebihDulu.scanAt == null ? '' : ' - ${Formatters.dateTime(lebihDulu.scanAt!)}'})',
+      );
+      tagok.bersihkanKonflik();
+      tagok.bersihkanPesan();
+      return;
+    }
+
+    // Validasi: server mengirim seluruh kesalahannya sekaligus.
+    final rincian = tagok.rincianGalat;
+    AppFeedback.error(
+      context,
+      rincian.isEmpty
+          ? (tagok.error ?? 'Gagal menyiapkan tag OK.')
+          : '${tagok.error}\n- ${rincian.join('\n- ')}',
+    );
+    tagok.bersihkanKonflik();
     tagok.bersihkanPesan();
+  }
+
+  /// Dialog pilih event saat lebih dari satu event STO sedang berjalan.
+  Future<int?> _pilihEvent(List<Map<String, dynamic>> events) {
+    return showDialog<int>(
+      context: context,
+      builder: (_) => SimpleDialog(
+        title: const Text('Pilih event STO'),
+        children: [
+          for (final e in events)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(
+                context,
+                int.tryParse('${e['id_event'] ?? e['id'] ?? ''}'),
+              ),
+              child: Text(
+                '${e['event_name'] ?? e['name'] ?? e['id_event'] ?? e['id']}',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _simpanQty(TagOk tag) async {
@@ -435,11 +530,35 @@ class _TagOkPageState extends State<TagOkPage> {
       );
     }
 
-    return FilledButton.icon(
-      onPressed: tagok.sibuk ? null : () => _setujui(tag),
-      icon: const Icon(Icons.check_circle_outline),
-      label: Text(tag.terbuka ? 'Setujui ulang' : 'Setujui - siap dihitung'),
-      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Area ditentukan petugas, bukan ditebak server: satu part bisa
+        // dihitung di area yang berbeda dari tempat ia diproduksi.
+        Row(
+          children: [
+            const Text(
+              'Area hitung',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _pilihArea(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: (tagok.sibuk || _area.isEmpty) ? null : () => _simpanSiapkan(tag),
+          icon: const Icon(Icons.check_circle_outline),
+          label: Text(_area.isEmpty ? 'Pilih area dulu' : 'Simpan - siap dihitung'),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+        ),
+      ],
     );
   }
 

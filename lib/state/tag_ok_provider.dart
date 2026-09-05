@@ -92,6 +92,90 @@ class TagOkProvider extends ChangeNotifier {
     }
   }
 
+  /// Pilihan event yang harus ditentukan petugas - terisi bila server
+  /// menolak dengan 409 karena ada beberapa event berjalan sekaligus.
+  List<Map<String, dynamic>> _pilihanEvent = const [];
+  List<Map<String, dynamic>> get pilihanEvent => _pilihanEvent;
+
+  /// Tag yang menurut server sudah disiapkan lebih dulu - bukan galat,
+  /// melainkan keterangan siapa yang mendahului.
+  TagOk? _sudahDisiapkan;
+  TagOk? get sudahDisiapkan => _sudahDisiapkan;
+
+  /// Rincian kesalahan validasi dari server; ditampilkan seluruhnya, karena
+  /// server mengirim semuanya sekaligus - menampilkan yang pertama saja
+  /// membuat operator memperbaiki satu per satu.
+  List<String> _rincianGalat = const [];
+  List<String> get rincianGalat => _rincianGalat;
+
+  void bersihkanKonflik() {
+    _pilihanEvent = const [];
+    _sudahDisiapkan = null;
+    _rincianGalat = const [];
+  }
+
+  /// SIAPKAN sekali panggil: mendaftarkan tag sekaligus membuatnya siap
+  /// dihitung. [idEvent] diisi setelah petugas memilih, bila server meminta.
+  Future<bool> siapkanBaru(
+    AppUser user,
+    String idTagOk, {
+    required String area,
+    int? idEvent,
+  }) async {
+    _sibuk = true;
+    _error = null;
+    bersihkanKonflik();
+    notifyListeners();
+
+    try {
+      _tag = await _api.prepareTagOk(
+        nik: user.nik,
+        idTagOk: idTagOk.trim(),
+        area: area,
+        idEvent: idEvent,
+        scanAt: DateTime.now(),
+      );
+      _pesan = 'Tag OK $idTagOk siap dihitung.';
+      return true;
+    } on ApiException catch (e) {
+      // Endpoint POST-nya belum ada di semua deployment. Selama itu, jalur
+      // lama dipakai supaya operator tetap bisa bekerja - bukan menampilkan
+      // "Unknown method" yang tidak bisa ia perbaiki sendiri.
+      if (e.statusCode == 405 ||
+          e.message.toLowerCase().contains('unknown method')) {
+        final lama = await siapkan(user, idTagOk);
+        if (lama) return true;
+        return false;
+      }
+
+      _rincianGalat = e.errors;
+
+      if (e.konflik) {
+        final isi = e.body ?? const <String, dynamic>{};
+
+        final events = isi['events'];
+        if (events is List && events.isNotEmpty) {
+          _pilihanEvent = [
+            for (final x in events)
+              if (x is Map) Map<String, dynamic>.from(x),
+          ];
+        }
+
+        final data = isi['data'];
+        if (data is Map) {
+          _sudahDisiapkan = TagOk.fromServer(Map<String, dynamic>.from(data));
+          _tag = _sudahDisiapkan;
+        }
+      }
+
+      _error = e.message;
+      return false;
+    } finally {
+      _sibuk = false;
+      notifyListeners();
+    }
+  }
+
   /// Menyiapkan tag: menandainya siap dihitung.
   Future<bool> siapkan(AppUser user, String idTagOk) async {
     _sibuk = true;
