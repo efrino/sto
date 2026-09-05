@@ -159,7 +159,37 @@ class _TagOkPageState extends State<TagOkPage> {
                   )
                 : _detail(tag, tagok),
           ),
+          // Tombol keputusan ditempel di bawah layar, di luar daftar yang
+          // menggulir. Sebelumnya ia ikut menggulir di bawah kartu detail -
+          // di layar handheld yang pendek tombolnya jatuh di luar pandangan,
+          // dan operator mengira memindai saja sudah menyiapkan tagnya.
+          if (tag != null) _bilahAksi(tag, tagok),
         ],
+      ),
+    );
+  }
+
+  /// Bilah aksi tetap di dasar layar.
+  Widget _bilahAksi(TagOk tag, TagOkProvider tagok) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _aksi(tag, tagok),
+            TextButton.icon(
+              onPressed: tagok.sibuk ? null : _lanjutTagBerikutnya,
+              icon: const Icon(Icons.qr_code_scanner, size: 18),
+              label: const Text('Pindai tag lain'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -203,14 +233,6 @@ class _TagOkPageState extends State<TagOkPage> {
                 ),
             ],
           ),
-        ),
-        const SizedBox(height: 14),
-        _aksi(tag, tagok),
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: tagok.sibuk ? null : _lanjutTagBerikutnya,
-          icon: const Icon(Icons.qr_code_scanner, size: 18),
-          label: const Text('Pindai tag lain'),
         ),
       ],
     );
