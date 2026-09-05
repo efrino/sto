@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lalu lintas polos (HTTP) hanya diizinkan ke server pabrik.
+
+  Sebelumnya `usesCleartextTraffic="true"` berlaku untuk SELURUH alamat, jadi
+  bila base URL sempat tertulis salah - atau diarahkan orang lain - NIK dan
+  seluruh hasil hitung bisa mengalir polos ke host mana pun. Alamat STO cuma
+  dua: HTTPS di internet, dan 192.168.10.67 di dalam pabrik yang memang belum
+  ber-TLS. Selain keduanya, Android sendiri yang menolak.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.10.67</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

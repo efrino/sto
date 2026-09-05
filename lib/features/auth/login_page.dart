@@ -56,18 +56,21 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Nomor aset perangkat bila sudah didaftarkan admin, atau id ringkasnya.
+  /// Nomor aset perangkat, bila admin sudah memberikannya.
+  ///
+  /// ANDROID_ID sengaja TIDAK ditampilkan di layar ini - itu kunci teknis
+  /// pemasangan NIK di server, dan layar login terbuka bagi siapa pun yang
+  /// memegang handheld. Admin tetap bisa melihatnya lengkap setelah masuk,
+  /// lewat Setting > Perangkat & pairing.
+  ///
+  /// Nomor asetnya sendiri bukan rahasia: stikernya tertempel di badan
+  /// perangkat, dan justru itu yang disebut operator saat melapor ke admin.
   String _perangkatLabel(BuildContext context) {
-    final devices = context.watch<DeviceProvider>();
-    final current = devices.current;
-    final identity = devices.identity;
+    final current = context.watch<DeviceProvider>().current;
     if (current != null && current.terdaftar) {
-      return 'Perangkat: ${current.assetName} (${current.model})';
+      return 'Perangkat ${current.assetName}';
     }
-    if (identity != null) {
-      return 'Perangkat belum diberi nomor aset - ID ${identity.shortId}';
-    }
-    return 'Membaca identitas perangkat...';
+    return '';
   }
 
   @override
@@ -158,47 +161,30 @@ class _LoginPageState extends State<LoginPage> {
                       : const Icon(Icons.login),
                   label: Text(session.isBusy ? 'Memproses...' : 'MASUK'),
                 ),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.infoSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline, size: 18, color: AppColors.info),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Login dikunci ke perangkat: operator hanya bisa '
-                          'masuk di perangkat yang NIK-nya sudah dipasangkan '
-                          'admin (Setting > Perangkat). Admin bebas login di '
-                          'perangkat mana pun.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            height: 1.45,
-                            color: AppColors.navy,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // TIDAK ADA keterangan aturan login di sini.
+                //
+                // Sebelumnya layar ini menjelaskan bahwa operator dikunci ke
+                // perangkat, di mana admin mengaturnya (Setting > Perangkat),
+                // dan bahwa ADMIN BEBAS LOGIN DI PERANGKAT MANA PUN. Kalimat
+                // terakhir itu justru menunjuk jalan masuk: siapa pun yang
+                // memegang handheld tahu bahwa cukup satu NIK admin untuk
+                // lolos dari penguncian perangkat. Aturannya tetap berlaku;
+                // yang tidak perlu adalah mengumumkannya sebelum login.
                 const SizedBox(height: 24),
-                Center(
-                  child: Text(
-                    _perangkatLabel(context),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
+                if (_perangkatLabel(context).isNotEmpty) ...[
+                  Center(
+                    child: Text(
+                      _perangkatLabel(context),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
+                  const SizedBox(height: 10),
+                ],
                 const Center(
                   child: Text(
                     '${AppConfig.companyName}\n${AppConfig.plantName} - ${AppConfig.departement}',
