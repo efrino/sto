@@ -31,9 +31,17 @@ class TagOkProvider extends ChangeNotifier {
   String? get pesan => _pesan;
   String? get error => _error;
 
+  /// true bila penolakan terakhir berupa 409 - keadaan, bukan kegagalan.
+  /// Layar menampilkannya apa adanya sebagai keterangan, dan TIDAK mengulang
+  /// permintaannya sendiri: tag yang sudah dihitung tidak akan berubah
+  /// jawabannya karena dicoba lagi.
+  bool _konflik = false;
+  bool get konflik => _konflik;
+
   void bersihkanPesan() {
     _pesan = null;
     _error = null;
+    _konflik = false;
   }
 
   /// Melepas tag yang sedang dibuka - dipanggil saat operator ingin memindai
@@ -211,7 +219,15 @@ class TagOkProvider extends ChangeNotifier {
       _pesan = 'Tag OK $idTagOk tercatat $qty pcs.';
       return true;
     } on ApiException catch (e) {
-      _error = '$e';
+      _konflik = e.konflik;
+      _rincianGalat = e.errors;
+      // Baris terbaru dari server ikut ditampilkan bila ada - operator perlu
+      // tahu angka siapa yang sudah tercatat, bukan sekadar bahwa ia ditolak.
+      final data = e.body?['data'];
+      if (data is Map) {
+        _tag = TagOk.fromServer(Map<String, dynamic>.from(data));
+      }
+      _error = e.message;
       return false;
     } finally {
       _sibuk = false;
@@ -259,7 +275,9 @@ class TagOkProvider extends ChangeNotifier {
               : 'Pengajuan $idTagOk ditolak.');
       return true;
     } on ApiException catch (e) {
-      _error = '$e';
+      _konflik = e.konflik;
+      _rincianGalat = e.errors;
+      _error = e.message;
       return false;
     } finally {
       _sibuk = false;

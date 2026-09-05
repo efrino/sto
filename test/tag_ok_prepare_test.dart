@@ -108,6 +108,33 @@ void main() {
     });
   });
 
+  group('Aturan qty saat menghitung', () {
+    test('qty 0 sah - barangnya memang nihil', () {
+      // Nol bukan "belum diisi": tag yang isinya habis tetap harus tercatat,
+      // dan selisihnya terhadap kanban justru yang dicari.
+      final t = TagOk.fromServer({
+        'id_tag_ok': 'X',
+        'area': 'WELD',
+        'qty_kbn': '24',
+        'qty_scan': 0,
+        'scanned_by': 'M.9276',
+        'scanned_at': '2026-09-06 08:00:00',
+      });
+
+      expect(t.qtyScan, 0);
+      expect(t.sudahDihitung, isTrue);
+      expect(t.selisih, -24);
+    });
+
+    test('qty_scan null berarti belum dihitung, bukan nol', () {
+      final t = TagOk.fromServer({'id_tag_ok': 'X', 'area': 'WELD'});
+
+      expect(t.qtyScan, isNull);
+      expect(t.sudahDihitung, isFalse);
+      expect(t.selisih, isNull);
+    });
+  });
+
   group('Waktu yang dikirim ke server', () {
     test('scan_at memakai bentuk yang diterima API, tanpa zona', () {
       // ISO8601 dengan Z membuat jamnya melenceng tujuh jam di server WIB.

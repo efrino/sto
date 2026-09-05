@@ -217,9 +217,28 @@ class _TagOkPageState extends State<TagOkPage> {
       AppFeedback.success(context, tagok.pesan ?? 'Tersimpan.');
       _lanjutTagBerikutnya();
     } else {
-      AppFeedback.error(context, tagok.error ?? 'Gagal menyimpan hasil hitung.');
+      _tampilkanPenolakan(tagok, 'Gagal menyimpan hasil hitung.');
     }
     tagok.bersihkanPesan();
+  }
+
+  /// Menampilkan penolakan server sesuai jenisnya.
+  ///
+  /// 409 adalah keadaan - tag sudah dihitung, belum disiapkan, sudah
+  /// dibatalkan - dan itu keterangan yang perlu dibaca, bukan kegagalan yang
+  /// perlu dicoba lagi. Mengulanginya sendiri hanya menghasilkan jawaban yang
+  /// sama, jadi layar tidak pernah melakukannya.
+  void _tampilkanPenolakan(TagOkProvider tagok, String bawaan) {
+    final rincian = tagok.rincianGalat;
+    final pesan = rincian.isEmpty
+        ? (tagok.error ?? bawaan)
+        : '${tagok.error ?? bawaan}\n- ${rincian.join('\n- ')}';
+
+    if (tagok.konflik) {
+      AppFeedback.info(context, pesan);
+    } else {
+      AppFeedback.error(context, pesan);
+    }
   }
 
   /// Membersihkan layar untuk tag berikutnya - operator memindai berturut-turut
@@ -487,7 +506,7 @@ class _TagOkPageState extends State<TagOkPage> {
       AppFeedback.success(context, tagok.pesan ?? 'Keputusan tersimpan.');
       _lanjutTagBerikutnya();
     } else {
-      AppFeedback.error(context, tagok.error ?? 'Gagal menyimpan keputusan.');
+      _tampilkanPenolakan(tagok, 'Gagal menyimpan keputusan.');
     }
     tagok.bersihkanPesan();
   }
