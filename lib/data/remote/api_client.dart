@@ -38,6 +38,7 @@ class ApiClient {
       : _client = client ?? http.Client();
 
   final Future<String> Function() baseUrlResolver;
+
   final http.Client _client;
 
   String? authToken;
@@ -59,6 +60,53 @@ class ApiClient {
         if (authToken != null && authToken!.isNotEmpty)
           'Authorization': 'Bearer $authToken',
       };
+
+  /// Mencoba satu jalur pada beberapa alamat server sekaligus, memakai yang
+  /// pertama menjawab. Dipakai untuk endpoint yang belum ada di semua
+  /// deployment - bukan untuk panggilan biasa, yang harus tetap patuh pada
+  /// alamat pilihan operator.
+  Future<Object?> getAbsolute(
+    Iterable<String> alamatServer,
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    final terpakai = (await baseUrlResolver()).replaceAll(RegExp(r'/+$'), '');
+    Object? galat;
+
+    for (final alamat in alamatServer) {
+      final base = alamat.replaceAll(RegExp(r'/+$'), '');
+      if (base == terpakai) continue;
+      try {
+        return await getPada(base, path, query: query);
+      } catch (e) {
+        galat = e;
+      }
+    }
+
+    throw galat ?? ApiException('Tidak ada server yang menjawab $path.');
+  }
+
+  /// GET pada satu alamat server tertentu, di luar alamat pilihan operator.
+  Future<dynamic> getPada(
+    String base,
+    String path, {
+    Map<String, String>? query,
+  }) async {
+    final bersih = <String, String>{};
+    query?.forEach((k, v) {
+      if (v.isNotEmpty) bersih[k] = v;
+    });
+    final uri = Uri.parse('$base$path').replace(
+      queryParameters: bersih.isEmpty ? null : bersih,
+    );
+
+    try {
+      return _decode(await _kirim('GET', uri, ulangiBilaTerputus: true));
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException(await _pesanJaringan(e));
+    }
+  }
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
     final uri = await _uri(path, query);

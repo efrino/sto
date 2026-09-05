@@ -4,6 +4,7 @@ import '../models/print_batch.dart';
 import '../models/pengajuan_batal.dart';
 import '../models/print_entry.dart';
 import '../models/sto_count.dart';
+import '../../core/config/app_config.dart';
 import '../models/chat_message.dart';
 import '../models/sto_tag.dart';
 import '../models/tag_ok.dart';
@@ -1123,11 +1124,22 @@ class HttpStoApi implements StoApi {
 
   @override
   Future<TagOk> fetchTagOkPrepare(String nik, String idTagOk) async {
-    final body = await _client.get(ApiEndpoints.tagOkPrepare, query: {
-      'nik': nik,
-      'id_tag_ok': idTagOk,
-    });
-    return _tagOkDari(body);
+    final query = {'nik': nik, 'id_tag_ok': idTagOk};
+    try {
+      return _tagOkDari(
+        await _client.get(ApiEndpoints.tagOkPrepare, query: query),
+      );
+    } on ApiException {
+      // Endpoint ini hanya ada di salah satu deployment: server pabrik dan
+      // mspin menjalankan salinan kode yang berbeda. Daripada memaksa
+      // operator berpindah alamat server, sisi satunya dicoba langsung.
+      final cadangan = await _client.getAbsolute(
+        AppConfig.serverPilihan.values,
+        ApiEndpoints.tagOkPrepare,
+        query: query,
+      );
+      return _tagOkDari(cadangan);
+    }
   }
 
   @override
