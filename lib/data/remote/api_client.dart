@@ -66,8 +66,6 @@ class ApiClient {
       // GET tidak mengubah apa pun, jadi aman diulang sekali bila sambungan
       // sempat terputus - lihat [_kirim].
       return _decode(await _kirim('GET', uri, ulangiBilaTerputus: true));
-    } on TimeoutException {
-      throw ApiException('Server tidak merespons (timeout).');
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(await _pesanJaringan(e));
@@ -81,8 +79,6 @@ class ApiClient {
       // tercetak atau dua user terdaftar. Lebih baik operator melihat pesan
       // gagal lalu menekan sendiri.
       return _decode(await _kirim('POST', uri, body: jsonEncode(body)));
-    } on TimeoutException {
-      throw ApiException('Server tidak merespons (timeout).');
     } catch (e) {
       if (e is ApiException) rethrow;
       throw ApiException(await _pesanJaringan(e));
@@ -140,6 +136,41 @@ class ApiClient {
   /// tahu cuma: servernya tidak terjangkau, dan alamat mana yang dicoba.
   Future<String> _pesanJaringan(Object error) async {
     final alamat = Uri.tryParse(await baseUrlResolver())?.host ?? 'server';
+    final teksAwal = '$error';
+
+    if (error is TimeoutException) {
+      return 'Server $alamat tidak menjawab dalam '
+          '${AppConfig.httpTimeout.inSeconds} detik. Sinyal mungkin lemah - '
+          'coba sekali lagi.';
+    }
+
+    // Kegagalan TLS - dan ini JARANG berarti sertifikat servernya bermasalah.
+    //
+    // Penyebab yang benar-benar terjadi di lapangan: handheld tersambung ke
+    // Wi-Fi/hotspot yang tidak punya internet atau memakai halaman login
+    // (captive portal). Yang menjawab bukan server STO, jadi sertifikat yang
+    // disodorkan memang bukan miliknya. Tanpa kalimat ini operator hanya
+    // melihat "HandshakeException ... CERTIFICATE_VERIFY_FAILED" dan tidak
+    // punya petunjuk apa pun untuk membereskannya.
+    if (error is HandshakeException ||
+        error is TlsException ||
+        error is CertificateException ||
+        teksAwal.contains('CERTIFICATE_VERIFY_FAILED') ||
+        teksAwal.contains('HandshakeException')) {
+      return 'Sambungan aman ke $alamat gagal diverifikasi. Biasanya karena '
+          'Wi-Fi yang dipakai belum punya internet atau masih meminta login '
+          'di halaman browser. Periksa jaringannya, atau pilih server '
+          'jaringan pabrik di menu Setting.';
+    }
+
+    // Nama server tidak bisa diterjemahkan jadi alamat - DNS atau internet
+    // yang bermasalah, bukan servernya.
+    if (teksAwal.contains('Failed host lookup') ||
+        teksAwal.contains('nodename nor servname')) {
+      return 'Alamat $alamat tidak bisa ditemukan. Perangkat ini belum '
+          'terhubung internet, atau memakai Wi-Fi yang tidak bisa menjangkau '
+          'server itu.';
+    }
 
     if (error is SocketException || error is HttpException) {
       return 'Server $alamat tidak terjangkau. Periksa Wi-Fi perangkat, '
@@ -201,7 +232,20 @@ class ApiClient {
       }
     }
 
-    if (httpStatus >= 200 && httpStatus < 300) return body;
+    // Balasan 2xx yang isinya bukan JSON hampir selalu halaman HTML milik
+    // captive portal atau proxy. Dulu isinya diteruskan apa adanya: pemanggil
+    // membacanya sebagai daftar kosong, sehingga layar tampak "berhasil tapi
+    // datanya tidak ada" - kegagalan paling sulit dilacak dari lapangan.
+    if (httpStatus >= 200 && httpStatus < 300) {
+      if (body is String) {
+        throw ApiException(
+          'Balasan dari jaringan ini bukan data STO (bukan JSON). Wi-Fi yang '
+          'dipakai kemungkinan masih meminta login lewat halaman browser.',
+          statusCode: httpStatus,
+        );
+      }
+      return body;
+    }
 
     final message = body is Map && body['message'] != null
         ? '${body['message']}'
