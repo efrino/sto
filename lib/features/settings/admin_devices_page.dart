@@ -117,7 +117,18 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
     // dari catatan lokal `device.niks` - catatan itu hanya berisi NIK yang
     // kebetulan pernah dipasangkan dari perangkat ini.
     final terpasang = _nikPerangkat(device).map((n) => n.toUpperCase()).toSet();
+
+    // Admin TIDAK ikut didaftar.
+    //
+    // Pemasangan hanya berlaku bagi operator - admin sengaja bebas login di
+    // perangkat mana pun, supaya perangkat baru selalu bisa didaftarkan dan
+    // pemasangan bisa dilepas saat event selesai. Memasangkan NIK admin ke
+    // sebuah HT karena itu tidak mengubah apa pun, tetapi terlihat seolah
+    // membatasinya - dan `users.device_id` yang ikut terisi membuat daftar
+    // "NIK terpasang" perangkat itu ramai oleh nama yang sebenarnya tidak
+    // terikat padanya.
     final kandidat = admin.users
+        .where((u) => !u.isAdmin)
         .where((u) => !terpasang.contains(u.nik.toUpperCase()))
         .toList();
 
@@ -562,8 +573,11 @@ class _PilihNik extends StatelessWidget {
           ? const Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'Semua user sudah terpasang di perangkat ini, atau daftar user '
-                'masih kosong (tambahkan lewat Setting > User).',
+                'Tidak ada operator yang bisa dipasangkan: semuanya sudah '
+                'terpasang di perangkat ini, atau daftar operator masih kosong '
+                '(tambahkan lewat Setting > User). Akun admin tidak '
+                'didaftar di sini - admin memang bebas login di perangkat mana '
+                'pun.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, height: 1.5),
               ),

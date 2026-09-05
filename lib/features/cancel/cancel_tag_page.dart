@@ -327,7 +327,7 @@ class _CancelTagPageState extends State<CancelTagPage>
             Tab(
               text: cancels.pending.isEmpty
                   ? 'PENGAJUAN'
-                  : 'PENGAJUAN (${cancels.pending.length})',
+                  : 'PENGAJUAN (${cancels.totalPengajuan})',
             ),
           ],
         ),
@@ -473,14 +473,119 @@ class _CancelTagPageState extends State<CancelTagPage>
       );
     }
 
+    final daftar = cancels.pending;
+
+    return Column(
+      children: [
+        _saringanArea(cancels),
+        Expanded(child: _isiPengajuan(cancels, daftar, admin)),
+      ],
+    );
+  }
+
+  /// Saringan area untuk kotak masuk pengajuan.
+  ///
+  /// Admin memegang seluruh area sekaligus, jadi antreannya bercampur. Saat
+  /// event berjalan, isinya puluhan - dan yang ingin diputuskan biasanya milik
+  /// satu area yang sedang ditangani.
+  ///
+  /// Pilihannya diambil dari isi antrean itu sendiri, jadi tidak ada chip yang
+  /// pasti kosong; barisnya hilang sama sekali bila antreannya cuma satu area.
+  Widget _saringanArea(CancelProvider cancels) {
+    final pilihan = cancels.areaPilihan;
+    if (pilihan.length < 2) return const SizedBox.shrink();
+
+    Widget chip(String label, String nilai) {
+      final terpilih = cancels.areaFilter == nilai;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: terpilih,
+          onSelected: (_) => cancels.setAreaFilter(nilai),
+          selectedColor: AppColors.primarySoft,
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: AppColors.border),
+          labelStyle: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: terpilih ? AppColors.primary : AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+      child: Row(
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(right: 10),
+            child: Text(
+              'Area',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  chip('Semua', ''),
+                  for (final area in pilihan) chip(area, area),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _isiPengajuan(
+    CancelProvider cancels,
+    List<PengajuanBatal> daftar,
+    bool admin,
+  ) {
+    if (daftar.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: cancels.load,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 60),
+            const Icon(Icons.filter_alt_off, size: 48,
+                color: AppColors.textMuted),
+            const SizedBox(height: 12),
+            Text(
+              'Tidak ada pengajuan di area ${cancels.areaFilter}. '
+              'Pilih "Semua" untuk melihat seluruh antrean.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: cancels.load,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        itemCount: cancels.pending.length,
+        itemCount: daftar.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
-          final pengajuan = cancels.pending[index];
+          final pengajuan = daftar[index];
           final tag = pengajuan.tag;
           return Container(
             padding: const EdgeInsets.all(14),

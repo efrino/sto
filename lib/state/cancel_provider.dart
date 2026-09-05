@@ -33,7 +33,41 @@ class CancelProvider extends ChangeNotifier {
   bool _busy = false;
   String? _message;
 
-  List<PengajuanBatal> get pending => _pending;
+  /// Antrean yang ditampilkan: TERBARU DI ATAS, dan tersaring bila admin
+  /// memilih satu area.
+  ///
+  /// Urutannya dibalik karena kotak masuk ini dipakai sambil berdiri di
+  /// lapangan: pengajuan yang baru masuk itulah yang sedang ditunggu
+  /// operatornya, sementara sebelumnya admin harus menggulir melewati puluhan
+  /// pengajuan lama untuk menemukannya.
+  List<PengajuanBatal> get pending => susunPengajuan(_pending, _areaFilter);
+
+  /// Jumlah seluruh pengajuan, tanpa memandang saringan - dipakai label tab
+  /// supaya angkanya tidak menyusut saat admin menyaring.
+  int get totalPengajuan => _pending.length;
+
+  /// Area yang benar-benar ada di antrean. Diambil dari datanya sendiri, bukan
+  /// daftar tetap, supaya tidak ada chip yang pasti kosong.
+  List<String> get areaPilihan {
+    final area = _pending
+        .map((p) => p.tag.area.trim().toUpperCase())
+        .where((a) => a.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return area;
+  }
+
+  String _areaFilter = '';
+  String get areaFilter => _areaFilter;
+
+  void setAreaFilter(String area) {
+    final bersih = area.trim().toUpperCase();
+    if (bersih == _areaFilter) return;
+    _areaFilter = bersih;
+    notifyListeners();
+  }
+
   bool get loading => _loading;
   bool get busy => _busy;
   String? get message => _message;
@@ -49,6 +83,9 @@ class CancelProvider extends ChangeNotifier {
     notifyListeners();
     try {
       _pending = await _repo.pendingRequests(admin: _admin);
+      if (_areaFilter.isNotEmpty && !areaPilihan.contains(_areaFilter)) {
+        _areaFilter = '';
+      }
     } finally {
       _loading = false;
       notifyListeners();
@@ -125,4 +162,35 @@ class CancelProvider extends ChangeNotifier {
   }
 
   void clearMessage() => _message = null;
+}
+
+/// Menyusun antrean pengajuan untuk ditampilkan: disaring per area lalu
+/// diurutkan TERBARU DI ATAS.
+///
+/// Berdiri di luar kelas supaya bisa diuji tanpa membangun repository.
+List<PengajuanBatal> susunPengajuan(
+  List<PengajuanBatal> semua,
+  String area,
+) {
+  final saringan = area.trim().toUpperCase();
+  final hasil = saringan.isEmpty
+      ? [...semua]
+      : semua
+          .where((p) => p.tag.area.trim().toUpperCase() == saringan)
+          .toList();
+
+  hasil.sort((a, b) {
+    final waktuA = a.tag.cancelRequestedAt;
+    final waktuB = b.tag.cancelRequestedAt;
+    // Pengajuan tanpa waktu (baris lama) ditaruh paling BAWAH - bukan
+    // dianggap paling baru hanya karena waktunya tidak diketahui.
+    if (waktuA == null && waktuB == null) {
+      return b.tag.tagNo.compareTo(a.tag.tagNo);
+    }
+    if (waktuA == null) return 1;
+    if (waktuB == null) return -1;
+    final urut = waktuB.compareTo(waktuA);
+    return urut != 0 ? urut : b.tag.tagNo.compareTo(a.tag.tagNo);
+  });
+  return hasil;
 }
