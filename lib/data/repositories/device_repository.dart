@@ -310,11 +310,21 @@ class DeviceRepository {
   Future<void> unpairAll(StoDevice device, {AppUser? admin}) async {
     final serverId = device.serverId;
 
-    // Tidak ada endpoint "lepas semua"; yang dilepas adalah NIK yang tercatat
-    // pada perangkat ini, satu per satu. Kalau satu gagal, sisanya tidak
-    // diteruskan supaya catatan lokal tidak berbeda dari server.
+    // Tidak ada endpoint "lepas semua"; yang dilepas adalah NIK yang menurut
+    // SERVER terpasang pada perangkat ini, satu per satu. Catatan lokal
+    // `device.niks` tidak dipakai sebagai daftar kerja - isinya hanya NIK yang
+    // kebetulan pernah dipasangkan dari perangkat ini, sehingga pemasangan
+    // yang dibuat admin dari HT lain akan tertinggal terpasang.
     if (admin != null && admin.isAdmin && serverId != null) {
-      for (final nik in device.niks) {
+      final List<String> daftar;
+      try {
+        final dariServer = await api.fetchUsers(admin.nik, deviceId: serverId);
+        daftar = dariServer.map((u) => u.nik).toList();
+      } on ApiException catch (e) {
+        throw DeviceRuleException('Daftar NIK perangkat tidak terbaca: $e');
+      }
+
+      for (final nik in daftar) {
         try {
           await api.updateUser(
             adminNik: admin.nik,
@@ -418,6 +428,57 @@ class DeviceRepository {
     for (final d in (await dao.all()).where((d) => d.serverId == serverId)) {
       await dao.delete(d.deviceId);
     }
+  }
+
+  /// Menautkan perangkat INI ke baris perangkat yang SUDAH ada di server.
+  ///
+  /// Dipakai saat ANDROID_ID sebuah handheld berubah padahal perangkatnya
+  /// sama - mis. APK ditandatangani kunci lain, atau perangkat di-factory
+  /// reset. Tanpa ini admin terpaksa membuat baris baru, lalu memasangkan
+  /// ulang seluruh NIK-nya satu per satu dan meninggalkan baris lama yang
+  /// tidak akan pernah dipakai.
+  ///
+  /// Yang diubah hanya `devices.android_id` milik baris itu; `devices.id`
+  /// tetap, dan karena pemasangan NIK menunjuk ke id tersebut
+  /// (`users.device_id`), seluruh NIK yang sudah terpasang ikut terbawa.
+  Future<void> tautkanKePerangkatServer(AppUser admin, int serverId) async {
+    if (!admin.isAdmin) {
+      throw DeviceRuleException('Hanya admin yang bisa menautkan perangkat.');
+    }
+
+    final identitas = await identity();
+    if (identitas.deviceId.trim().isEmpty) {
+      throw DeviceRuleException('Identitas perangkat ini belum terbaca.');
+    }
+
+    final Map<String, dynamic> hasil;
+    try {
+      hasil = await api.updateDevice(
+        adminNik: admin.nik,
+        deviceId: serverId,
+        androidId: identitas.deviceId,
+      );
+    } on ApiException catch (e) {
+      throw DeviceRuleException('Gagal di server: $e');
+    }
+
+    // Baris lokal milik ANDROID_ID lama - kalau ada - dibuang supaya tidak
+    // tertinggal sebagai perangkat kedua di layar.
+    for (final lama in await dao.all()) {
+      if (lama.serverId == serverId && lama.deviceId != identitas.deviceId) {
+        await dao.delete(lama.deviceId);
+      }
+    }
+
+    final ini = await ensureRegistered(registeredBy: admin.nik);
+    final nama = '${hasil['name'] ?? ''}'.trim();
+    await dao.save(
+      ini.copyWith(
+        serverId: serverId,
+        assetName: nama.isEmpty ? null : nama,
+        lastSeenAt: DateTime.now(),
+      ),
+    );
   }
 
   /// Perangkat lain yang memakai NIK yang sama - ditampilkan sebagai peringatan.

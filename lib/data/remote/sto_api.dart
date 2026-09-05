@@ -348,6 +348,7 @@ class HttpStoApi implements StoApi {
     if (data == null) {
       throw ApiException('Format respons login tidak dikenali.');
     }
+    _ingatPerangkat(data);
     final user = _userFromApi(data);
     if (user.nik.isEmpty) throw ApiException('NIK tidak terdaftar.');
     return user;
@@ -378,6 +379,7 @@ class HttpStoApi implements StoApi {
     if (data == null) {
       throw ApiException('Format respons register tidak dikenali.');
     }
+    _ingatPerangkat(data);
     return _userFromApi(data);
   }
 
@@ -386,9 +388,13 @@ class HttpStoApi implements StoApi {
   /// `android_id`.
   Map<String, dynamic>? perangkatTerpasang;
 
-  /// Backend menyimpan identitas seadanya: nik, role, tim, dan daftar area.
-  /// Nama karyawan belum ada di tabel `users`, jadi sementara memakai NIK.
-  AppUser _userFromApi(Map<String, dynamic> data) {
+  /// Mencatat perangkat yang terpasang pada user hasil LOGIN/REGISTER.
+  ///
+  /// Sengaja dipanggil terpisah, bukan dari [_userFromApi]: `user-list`
+  /// memetakan puluhan baris lewat fungsi yang sama, dan dulu tiap baris ikut
+  /// menimpa [perangkatTerpasang] - sehingga yang tersimpan adalah perangkat
+  /// milik user TERAKHIR pada daftar, lalu dipakai sebagai perangkat sesi ini.
+  void _ingatPerangkat(Map<String, dynamic> data) {
     final deviceId = int.tryParse('${data['device_id'] ?? ''}');
     perangkatTerpasang = deviceId == null
         ? null
@@ -397,7 +403,11 @@ class HttpStoApi implements StoApi {
             'device_name': '${data['device_name'] ?? ''}',
             'android_id': '${data['android_id'] ?? ''}',
           };
+  }
 
+  /// Backend menyimpan identitas seadanya: nik, role, tim, dan daftar area.
+  /// Nama karyawan belum ada di tabel `users`, jadi sementara memakai NIK.
+  AppUser _userFromApi(Map<String, dynamic> data) {
     final role = '${data['role'] ?? ''}'.trim().toLowerCase();
     return AppUser(
       nik: '${data['nik'] ?? ''}'.trim().toUpperCase(),
@@ -442,7 +452,21 @@ class HttpStoApi implements StoApi {
       'q': keyword,
       'limit': limit,
     });
-    return _rows(body).map(_userFromApi).toList();
+
+    var rows = _rows(body);
+
+    // `id_device` DIABAIKAN server (diuji 4 Sep 2026: keempat perangkat
+    // membalas ketujuh user yang sama), jadi tanpa saringan ini halaman
+    // Perangkat menampilkan SELURUH NIK sebagai terpasang di setiap
+    // perangkat. Balasannya sudah memuat `device_id` per baris, jadi
+    // penyaringannya dikerjakan di sini sampai server diperbaiki.
+    if (deviceId != null && deviceId != 0) {
+      rows = rows
+          .where((r) => int.tryParse('${r['device_id'] ?? ''}') == deviceId)
+          .toList();
+    }
+
+    return rows.map(_userFromApi).toList();
   }
 
   @override

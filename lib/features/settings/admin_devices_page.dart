@@ -31,6 +31,15 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
   /// Tidak diambil dari catatan lokal: pemasangan bisa diubah admin dari HT
   /// lain, jadi satu-satunya jawaban yang benar adalah jawaban server.
   final Map<int, List<AppUser>> _pengguna = {};
+
+  /// Daftar perangkat yang isinya sudah diambil, sebagai satu teks pembanding.
+  ///
+  /// Dulu pemicunya membandingkan `_pengguna.length` dengan jumlah perangkat.
+  /// Perangkat yang belum terdaftar di server tidak punya `serverId` dan
+  /// dilewati, jadi kedua angka itu tidak pernah sama - setiap build memanggil
+  /// server lagi, terus-menerus.
+  String? _signaturPengguna;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +63,7 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
     }
     if (!mounted) return;
     setState(() {
+      _signaturPengguna = devices.devices.map((d) => d.serverId).join(',');
       _pengguna
         ..clear()
         ..addAll(hasil);
@@ -103,7 +113,13 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
 
   Future<void> _pair(StoDevice device) async {
     final admin = context.read<AdminProvider>();
-    final kandidat = admin.users.where((u) => !device.allows(u.nik)).toList();
+    // Yang sudah terpasang dibaca dari jawaban server (`_nikPerangkat`), bukan
+    // dari catatan lokal `device.niks` - catatan itu hanya berisi NIK yang
+    // kebetulan pernah dipasangkan dari perangkat ini.
+    final terpasang = _nikPerangkat(device).map((n) => n.toUpperCase()).toSet();
+    final kandidat = admin.users
+        .where((u) => !terpasang.contains(u.nik.toUpperCase()))
+        .toList();
 
     final pilihan = await showModalBottomSheet<AppUser>(
       context: context,
@@ -133,6 +149,87 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
     await devices.pair(device, pilihan.nik);
     if (!mounted) return;
     AppFeedback.success(context, devices.message ?? 'Tersimpan.');
+    devices.clearMessage();
+    await _muatPengguna();
+  }
+
+  /// Menautkan perangkat ini ke pendaftaran yang sudah ada di server.
+  ///
+  /// ANDROID_ID berubah bila APK ditandatangani kunci lain atau perangkat
+  /// di-factory reset - handheldnya sama, tapi server melihatnya sebagai
+  /// perangkat baru. Daripada admin mendaftarkan ulang dan memasangkan
+  /// seluruh NIK-nya satu per satu, baris lamanya tinggal diarahkan ke
+  /// ANDROID_ID yang baru; NIK yang sudah terpasang ikut terbawa.
+  Future<void> _tautkan(StoDevice ini) async {
+    final devices = context.read<DeviceProvider>();
+    final kandidat = devices.devices
+        .where((d) => d.serverId != null && d.deviceId != ini.deviceId)
+        .toList();
+
+    if (kandidat.isEmpty) {
+      AppFeedback.info(
+        context,
+        'Belum ada perangkat lain yang terdaftar di server untuk ditautkan.',
+      );
+      return;
+    }
+
+    final pilihan = await showModalBottomSheet<StoDevice>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 4, 16, 10),
+              child: Text(
+                'Perangkat ini sebenarnya yang mana?',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.navy,
+                ),
+              ),
+            ),
+            for (final d in kandidat)
+              ListTile(
+                leading: const Icon(Icons.smartphone, color: AppColors.navy),
+                title: Text(d.label),
+                subtitle: Text(
+                  'ID lama ${d.deviceId}  -  NIK terpasang: ${_nikLabel(d)}',
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                isThreeLine: true,
+                onTap: () => Navigator.pop(ctx, d),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (pilihan == null || !mounted) return;
+
+    final ok = await AppFeedback.confirm(
+      context,
+      title: 'Tautkan ke ${pilihan.label}?',
+      message: 'Pendaftaran ${pilihan.label} akan diarahkan ke ID perangkat '
+          'ini (${ini.deviceId}). NIK yang sudah terpasang padanya '
+          '(${_nikLabel(pilihan)}) ikut terbawa, dan ID lamanya '
+          '(${pilihan.deviceId}) tidak berlaku lagi. Lakukan ini hanya bila '
+          'ini memang handheld yang sama.',
+      confirmLabel: 'Tautkan',
+    );
+    if (!ok || !mounted) return;
+
+    final serverId = pilihan.serverId;
+    if (serverId == null) return;
+    await devices.tautkanKePerangkatServer(serverId);
+    if (!mounted) return;
+    AppFeedback.info(context, devices.message ?? 'Selesai.');
     devices.clearMessage();
     await _muatPengguna();
   }
@@ -179,8 +276,11 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
   @override
   Widget build(BuildContext context) {
     final devices = context.watch<DeviceProvider>();
-    // Daftar NIK menyusul setelah daftar perangkat terbaca.
-    if (!devices.loading && _pengguna.length != devices.devices.length) {
+    // Daftar NIK menyusul setelah daftar perangkat terbaca - sekali per
+    // susunan perangkat, bukan tiap build.
+    final signatur = devices.devices.map((d) => d.serverId).join(',');
+    if (!devices.loading && _signaturPengguna != signatur) {
+      _signaturPengguna = signatur;
       WidgetsBinding.instance.addPostFrameCallback((_) => _muatPengguna());
     }
     final identity = devices.identity;
@@ -396,6 +496,13 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
               label: const Text('Pasang NIK'),
               style: ElevatedButton.styleFrom(minimumSize: const Size(0, 40)),
             ),
+            if (ini && device.serverId == null)
+              OutlinedButton.icon(
+                onPressed: () => _tautkan(device),
+                icon: const Icon(Icons.link_outlined, size: 18),
+                label: const Text('Tautkan ke yang sudah ada'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40)),
+              ),
             if (!ini && device.serverId != null)
               OutlinedButton.icon(
                 onPressed: () => _hapusPerangkat(device),

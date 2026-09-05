@@ -51,10 +51,30 @@ class AdminRepository {
     if (!admin.isAdmin) return userDao.all();
 
     try {
-      return await api.fetchUsers(admin.nik, limit: 500);
+      final dariServer = await api.fetchUsers(admin.nik, limit: 500);
+      await _tulisCacheUser(dariServer);
+      return dariServer;
     } on ApiException catch (e) {
       peringatanSinkron = 'Daftar user tidak bisa dibaca - server: $e';
       return const [];
+    }
+  }
+
+  /// Menyamakan cache akun perangkat dengan daftar server.
+  ///
+  /// Bukan sekadar hiasan offline: aturan lokal (NIK ganda, "admin terakhir")
+  /// membaca tabel ini. Selama tidak pernah diisi, isinya hanya akun yang
+  /// pernah login di perangkat ini - sehingga penjagaannya menilai keadaan
+  /// yang jauh lebih sempit dari keadaan sebenarnya.
+  Future<void> _tulisCacheUser(List<AppUser> dariServer) async {
+    final adaDiServer = dariServer.map((u) => u.nik.toUpperCase()).toSet();
+    for (final lama in await userDao.all()) {
+      if (!adaDiServer.contains(lama.nik.toUpperCase())) {
+        await userDao.delete(lama.nik);
+      }
+    }
+    for (final user in dariServer) {
+      await userDao.save(user);
     }
   }
 
@@ -183,13 +203,33 @@ class AdminRepository {
 
     try {
       final rows = await api.fetchEvents(pengakses.nik);
-      return rows.map(StoEvent.fromServer).toList();
+      final dariServer = rows.map(StoEvent.fromServer).toList();
+      await _tulisCacheEvent(dariServer);
+      return dariServer;
     } on ApiException catch (e) {
       // Tidak ada salinan lokal yang dipakai sebagai pengganti: daftar event
       // milik server, dan menampilkan daftar lama tanpa sadar justru membuat
       // tag dibuat pada periode yang sudah ditutup.
       peringatanSinkron = 'Daftar event tidak bisa dibaca - server: $e';
       return const [];
+    }
+  }
+
+  /// Menyamakan cache event perangkat dengan daftar server.
+  ///
+  /// [activeEvent] - yang menentukan boleh/tidaknya tag dibuat - membaca
+  /// tabel ini, bukan balasan server. Selama sinkronisasi tidak menuliskannya,
+  /// event yang dibuka admin dari perangkat lain tidak pernah terlihat di sini
+  /// dan halaman Siapkan Tag selalu berkata tidak ada event berjalan.
+  Future<void> _tulisCacheEvent(List<StoEvent> dariServer) async {
+    final adaDiServer = dariServer.map((e) => e.id).toSet();
+    for (final lama in await eventDao.all()) {
+      if (!adaDiServer.contains(lama.id)) {
+        await eventDao.delete(lama.id);
+      }
+    }
+    for (final event in dariServer) {
+      await eventDao.save(event);
     }
   }
 

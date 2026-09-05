@@ -107,6 +107,13 @@ class DeviceProvider extends ChangeNotifier {
         'Perangkat dihapus dari server.',
       );
 
+  /// Menautkan perangkat ini ke baris perangkat yang sudah terdaftar di
+  /// server - dipakai saat ANDROID_ID berubah pada handheld yang sama.
+  Future<bool> tautkanKePerangkatServer(int serverId) => _jalankan(
+        () => _repo.tautkanKePerangkatServer(_admin!, serverId),
+        'Perangkat ini ditautkan ke pendaftaran yang sudah ada.',
+      );
+
   /// Peringatan bila satu NIK terpasang di lebih dari satu perangkat.
   Future<List<StoDevice>> otherDevicesWith(String nik, String deviceId) =>
       _repo.otherDevicesWith(nik, deviceId);
