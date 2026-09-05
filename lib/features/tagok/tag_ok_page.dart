@@ -78,7 +78,21 @@ class _TagOkPageState extends State<TagOkPage> {
       if (tag == null) {
         await sound.error();
         if (!mounted) return;
-        AppFeedback.error(context, tagok.error ?? 'Tag OK tidak ditemukan.');
+
+        // Di menu Hitung, "tidak ditemukan" hampir selalu berarti tagnya
+        // memang ada tetapi belum disiapkan - server mencarinya di data STO,
+        // bukan di data produksi. Operator perlu tahu langkah berikutnya,
+        // bukan sekadar bahwa tagnya tidak ketemu.
+        final belumDisiapkan = widget.mode != TagOkMode.siapkan &&
+            (tagok.error ?? '').toLowerCase().contains('tidak ditemukan');
+
+        AppFeedback.error(
+          context,
+          belumDisiapkan
+              ? 'Tag ini belum disiapkan. Minta petugas membukanya lewat menu '
+                  'Siapkan Tag OK lebih dulu.'
+              : tagok.error ?? 'Tag OK tidak ditemukan.',
+        );
         tagok.bersihkanPesan();
         return;
       }
