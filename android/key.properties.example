@@ -6,8 +6,7 @@
 #
 # Membuat keystore (sekali saja, untuk seumur hidup aplikasi ini):
 #
-#   keytool -genkey -v -keystore D:/kunci/sto-prep.jks \
-#     -keyalg RSA -keysize 2048 -validity 10000 -alias sto-prep
+#   keytool -genkey -v -keystore D:/kunci/sto-prep.jks -keyalg RSA -keysize 2048 -validity 10000 -alias sto-prep
 #
 # CADANGKAN berkas .jks dan kata sandinya di tempat aman. Kalau hilang, semua
 # handheld yang sudah terpasang harus di-uninstall lebih dulu sebelum bisa

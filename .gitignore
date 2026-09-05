@@ -45,3 +45,9 @@ app.*.map.json
 /android/app/release
 
 .claude*
+
+# Keluaran build Android. Root build.gradle.kts mengarahkan sebagian besar
+# hasil ke /build, tetapi folder android/build tetap muncul - dan pernah ikut
+# terbawa `git add -A`.
+/android/build/
+/android/.gradle/

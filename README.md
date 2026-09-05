@@ -19,6 +19,27 @@ admin. Kartu **Ringkasan hari ini** pun mengikuti hak itu: tag discan (akses
 scan), tag dicetak (akses siapkan), dan tag batal (akses batal). Menu
 **Riwayat Scan** berisi hasil hitung, **Setting** hanya untuk admin.
 
+## Handheld lapangan 32-bit - jangan batasi ABI
+
+Blueprint MPOS 332 dan Senraise H10 memakai prosesor **32-bit**:
+
+```
+ro.product.cpu.abilist   = armeabi-v7a,armeabi
+ro.product.cpu.abilist64 = (kosong)
+```
+
+Karena itu **jangan** membangun dengan `--target-platform android-arm64`.
+APK-nya terpasang tanpa keluhan lalu langsung mati saat dibuka:
+
+```
+Could not find 'libflutter.so'.
+Looked for: [armeabi-v7a, armeabi], but only found: [arm64-v8a]
+```
+
+`flutter build apk --release` tanpa argumen sudah menyertakan armeabi-v7a dan
+aman dipakai. Bila ukuran APK jadi masalah, pakai `--target-platform
+android-arm` - bukan arm64.
+
 ## Login dikunci ke perangkat (pairing)
 
 Operator hanya bisa login di perangkat yang NIK-nya sudah dipasangkan admin.
@@ -31,6 +52,15 @@ kecuali dipasang sebagai Device Owner lewat MDM. Penggantinya `ANDROID_ID`
 (dibaca lewat MethodChannel `sto_prep/device` di MainActivity): tetap sama
 setelah restart maupun install ulang selama APK ditandatangani kunci yang sama,
 dan berubah hanya bila perangkat di-factory reset.
+
+Karena itu **build debug pun ditandatangani kunci release** (lihat blok `debug`
+pada `android/app/build.gradle.kts`): tanpa itu `flutter run` memasang APK
+berkunci debug - yang dibuat per-komputer - sehingga handheld yang sama melapor
+sebagai perangkat baru, pemasangan NIK-nya tidak dikenali, dan pemasangannya
+ditolak `INSTALL_FAILED_UPDATE_INCOMPATIBLE` lalu meng-uninstall aplikasi
+berikut antrean kiriman yang belum sampai server. Syaratnya `android/key.properties`
+ada di mesin itu; tanpa berkas itu build debug tetap jalan, hanya ANDROID_ID-nya
+yang berbeda.
 
 Admin memberi tiap perangkat **nomor aset perusahaan** (mis. `016-HSS-TBN`) agar
 mudah dikenali di lapangan, lalu memasangkan satu atau beberapa NIK (mis. shift

@@ -84,6 +84,27 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Ditandatangani kunci RELEASE bila keystore-nya ada.
+            //
+            // ANDROID_ID di Android 8+ diturunkan dari kunci penandatangan
+            // APK, jadi build debug yang memakai kunci debug bawaan melapor
+            // sebagai PERANGKAT LAIN - pemasangan NIK yang sudah didaftarkan
+            // admin langsung tidak dikenali, dan tiap komputer menghasilkan
+            // ANDROID_ID-nya sendiri karena kunci debug dibuat per-mesin.
+            //
+            // Dengan satu kunci untuk debug dan release, ANDROID_ID sebuah
+            // handheld tetap sama - dan `flutter run` tidak lagi ditolak
+            // INSTALL_FAILED_UPDATE_INCOMPATIBLE lalu meng-uninstall aplikasi
+            // berikut antrean kiriman yang belum sampai server.
+            //
+            // Tanpa key.properties, build debug tetap jalan dengan kunci debug
+            // bawaan - hanya saja ANDROID_ID-nya berbeda.
+            if (adaKunci) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+
         release {
             // Tanpa keystore, build release TIDAK dilanjutkan.
             //
