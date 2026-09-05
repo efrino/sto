@@ -35,6 +35,43 @@ class PrepareProvider extends ChangeNotifier {
   /// izin area yang diberikan admin ke user tersebut.
   void applyPermissions(AppUser user) {
     _allowedAreas = user.hasAreaLimit ? user.areas : const [];
+
+    // Saringan yang sudah tidak masuk izin baru dibuang - kalau dibiarkan,
+    // daftarnya kosong tanpa alasan yang terlihat operator.
+    if (_areaFilter.isNotEmpty && !areaPilihan.contains(_areaFilter)) {
+      _areaFilter = '';
+    }
+  }
+
+  /// Area yang sedang dipilih operator sebagai saringan. Kosong = semua area
+  /// yang menjadi haknya.
+  String _areaFilter = '';
+  String get areaFilter => _areaFilter;
+
+  /// Pilihan area pada layar cari part.
+  ///
+  /// User yang dibatasi admin hanya melihat areanya sendiri; yang tidak
+  /// dibatasi (mis. admin) melihat kelima area STO.
+  List<String> get areaPilihan =>
+      _allowedAreas.isNotEmpty ? _allowedAreas : AppConfig.areaSto;
+
+  /// Area yang benar-benar dipakai menyaring pencarian: satu area bila
+  /// operator memilihnya, atau seluruh area yang menjadi haknya.
+  List<String> get _areaPencarian =>
+      _areaFilter.isEmpty ? _allowedAreas : [_areaFilter];
+
+  /// Mengganti saringan area lalu mencari ulang dengan kata kunci yang sama.
+  ///
+  /// Ada gunanya justru bagi operator yang dipercaya banyak area: tanpa
+  /// saringan, satu nomor part yang mirip dari area lain bisa terpilih dan
+  /// tag tercetak atas nama area yang salah - dan nomor tag yang sudah dibuat
+  /// tidak bisa ditarik kembali.
+  Future<void> setAreaFilter(String area) async {
+    final bersih = area.trim().toUpperCase();
+    if (bersih == _areaFilter) return;
+    _areaFilter = bersih;
+    notifyListeners();
+    await search(_keyword);
   }
 
   // ------------------------------------------------------------- pencarian
@@ -149,7 +186,7 @@ class PrepareProvider extends ChangeNotifier {
         keyword,
         limit: pageSize,
         offset: 0,
-        areas: _allowedAreas,
+        areas: _areaPencarian,
       );
       _results = items;
       _offset = items.length;
@@ -173,7 +210,7 @@ class PrepareProvider extends ChangeNotifier {
         _keyword,
         limit: pageSize,
         offset: _offset,
-        areas: _allowedAreas,
+        areas: _areaPencarian,
       );
       if (more.isNotEmpty) {
         _results = [..._results, ...more];
@@ -200,7 +237,7 @@ class PrepareProvider extends ChangeNotifier {
         _keyword,
         limit: pageSize,
         offset: 0,
-        areas: _allowedAreas,
+        areas: _areaPencarian,
       );
       _results = items;
       _offset = items.length;

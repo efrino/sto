@@ -82,6 +82,15 @@ class _PreparePageState extends State<PreparePage> {
     final user = context.read<SessionProvider>().user;
     if (user == null) return;
 
+    // Area part berbeda dari area yang sedang disaring operator - ditanya
+    // lebih dulu, SEBELUM nomor tag diminta ke server.
+    //
+    // Operator yang dipercaya beberapa area mencari dengan saringan satu
+    // area, lalu mengetuk part dari daftar "Semua" atau dari hasil sebelum
+    // saringannya diganti. Tag yang terlanjur dibuat tidak bisa ditarik
+    // kembali - satu-satunya jalan adalah pengajuan pembatalan ke admin.
+    if (!await _areaSesuaiSaringan(provider)) return;
+
     // Tag hanya boleh dibuat saat ada event STO yang sedang berjalan.
     final event = await admin.refreshActiveEvent(pengakses: user);
     if (!mounted) return;
@@ -120,6 +129,28 @@ class _PreparePageState extends State<PreparePage> {
       );
     }
     Navigator.pushNamed(context, AppRoutes.preview);
+  }
+
+  /// true bila boleh diteruskan: areanya memang sama, tidak ada saringan
+  /// yang dipasang, atau operator sudah menegaskan bahwa ini disengaja.
+  Future<bool> _areaSesuaiSaringan(PrepareProvider provider) async {
+    final saringan = provider.areaFilter.trim().toUpperCase();
+    final areaPart = (provider.selectedPart?.area ?? '').trim().toUpperCase();
+    if (saringan.isEmpty || areaPart.isEmpty || saringan == areaPart) {
+      return true;
+    }
+
+    final lanjut = await AppFeedback.confirm(
+      context,
+      title: 'Area part berbeda',
+      message: 'Part ${provider.selectedPart?.partNumber} berada di area '
+          '$areaPart, sedangkan saringan Anda $saringan. Tag akan dicetak '
+          'atas nama area $areaPart dan nomornya tidak bisa ditarik kembali - '
+          'pembatalan harus lewat pengajuan ke admin. Lanjutkan?',
+      confirmLabel: 'Ya, cetak $areaPart',
+      destructive: true,
+    );
+    return lanjut && mounted;
   }
 
   @override

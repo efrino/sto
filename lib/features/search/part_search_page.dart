@@ -88,6 +88,7 @@ class _PartSearchPageState extends State<PartSearchPage> {
       body: Column(
         children: [
           _searchBar(provider),
+          _areaFilter(provider),
           Expanded(child: _results(provider)),
         ],
       ),
@@ -132,6 +133,72 @@ class _PartSearchPageState extends State<PartSearchPage> {
     );
   }
 
+  /// Saringan area.
+  ///
+  /// Diminta lapangan: satu operator bisa dipercaya beberapa area, dan nomor
+  /// part antar area bisa mirip. Tanpa saringan, part dari area lain ikut
+  /// muncul di hasil pencarian dan tag terlanjur tercetak atas nama area yang
+  /// salah - sedangkan nomor tag yang sudah dibuat tidak bisa ditarik kembali.
+  ///
+  /// Hanya ditampilkan bila memang ada pilihan: operator satu area tidak perlu
+  /// diberi baris yang isinya cuma satu tombol.
+  Widget _areaFilter(PrepareProvider provider) {
+    final pilihan = provider.areaPilihan;
+    if (pilihan.length < 2) return const SizedBox.shrink();
+
+    Widget chip(String label, String nilai) {
+      final terpilih = provider.areaFilter == nilai;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: terpilih,
+          onSelected: (_) => provider.setAreaFilter(nilai),
+          selectedColor: AppColors.primarySoft,
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: AppColors.border),
+          labelStyle: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: terpilih ? AppColors.primary : AppColors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+      child: Row(
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(right: 10),
+            child: Text(
+              'Area',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  chip('Semua', ''),
+                  for (final area in pilihan) chip(area, area),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Pemisah daftar area (dipakai di beberapa teks).
   static const String sep = ', ';
 
@@ -147,11 +214,19 @@ class _PartSearchPageState extends State<PartSearchPage> {
             ? 'Master part belum ada di perangkat ini. Tekan tombol unduh di '
                 'kanan atas untuk menariknya dari server - yang diunduh hanya '
                 'area yang menjadi izin Anda.'
-            : provider.allowedAreas.isEmpty
-                ? 'Coba kata kunci lain, misalnya sebagian nomor part atau nama part.'
-                : 'Tidak ada part yang cocok di area Anda '
-                    '(${provider.allowedAreas.join(sep)}). Minta admin menambah '
-                    'area bila memang diperlukan.',
+            : provider.areaFilter.isNotEmpty
+                // Saringan area diperiksa lebih dulu: ini sebab yang paling
+                // mungkin, dan satu-satunya yang bisa dibereskan operator
+                // sendiri saat itu juga.
+                ? 'Tidak ada part yang cocok di area ${provider.areaFilter}. '
+                    'Pilih "Semua" di baris area untuk mencari di seluruh '
+                    'area Anda.'
+                : provider.allowedAreas.isEmpty
+                    ? 'Coba kata kunci lain, misalnya sebagian nomor part '
+                        'atau nama part.'
+                    : 'Tidak ada part yang cocok di area Anda '
+                        '(${provider.allowedAreas.join(sep)}). Minta admin '
+                        'menambah area bila memang diperlukan.',
         actionLabel: 'Perbarui master part',
         onAction: provider.refreshMaster,
       );
@@ -240,6 +315,27 @@ class _PartSearchPageState extends State<PartSearchPage> {
             const SizedBox(height: 8),
             Row(
               children: [
+                // Area ditulis di tiap baris, bukan hanya di halaman
+                // berikutnya: kalau operator memakai saringan "Semua",
+                // inilah satu-satunya penanda part ini milik area mana.
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.navySoft,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    part.area,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.navy,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
                 _tag(Icons.factory_outlined, '${part.customer} / ${part.model}'),
                 const SizedBox(width: 10),
                 _tag(Icons.place_outlined, part.location),
