@@ -63,7 +63,11 @@ class _TagOkPageState extends State<TagOkPage> {
     final sound = context.read<AppDependencies>().sound;
 
     try {
-      final tag = await tagok.cari(user, kode);
+      final tag = await tagok.cari(
+        user,
+        kode,
+        bolehDariProduksi: widget.mode == TagOkMode.siapkan,
+      );
       if (!mounted) return;
 
       if (tag == null) {

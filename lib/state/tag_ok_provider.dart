@@ -44,18 +44,48 @@ class TagOkProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// true bila tag yang sedang dibuka datang dari sumber produksi dan belum
+  /// terdaftar pada STO - keterangannya perlu ikut dikirim saat disiapkan.
+  bool _dariProduksi = false;
+  bool get dariProduksi => _dariProduksi;
+
   /// Mengambil detail tag OK hasil pindai kamera.
-  Future<TagOk?> cari(AppUser user, String idTagOk) async {
+  ///
+  /// [bolehDariProduksi] dipakai menu Siapkan: tag produksi harian belum ada
+  /// di tabel STO sampai seseorang menyiapkannya, jadi detailnya diambil dari
+  /// sumbernya. Menu Hitung dan Batal sengaja tidak melakukan itu - tag yang
+  /// belum disiapkan memang belum boleh dihitung.
+  Future<TagOk?> cari(
+    AppUser user,
+    String idTagOk, {
+    bool bolehDariProduksi = false,
+  }) async {
     _sibuk = true;
     _error = null;
+    _dariProduksi = false;
     notifyListeners();
+
+    final kode = idTagOk.trim();
     try {
-      _tag = await _api.fetchTagOk(user.nik, idTagOk.trim());
+      _tag = await _api.fetchTagOk(user.nik, kode);
       return _tag;
     } on ApiException catch (e) {
-      _tag = null;
-      _error = '$e';
-      return null;
+      if (!bolehDariProduksi) {
+        _tag = null;
+        _error = '$e';
+        return null;
+      }
+
+      // Belum terdaftar pada STO - coba sumber produksinya.
+      try {
+        _tag = await _api.fetchTagOkPrepare(user.nik, kode);
+        _dariProduksi = true;
+        return _tag;
+      } on ApiException catch (e2) {
+        _tag = null;
+        _error = '$e2';
+        return null;
+      }
     } finally {
       _sibuk = false;
       notifyListeners();
@@ -68,7 +98,14 @@ class TagOkProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      _tag = await _api.openTagOk(user.nik, idTagOk.trim());
+      _tag = await _api.openTagOk(
+        user.nik,
+        idTagOk.trim(),
+        // Keterangan hanya perlu dikirim untuk tag yang belum terdaftar;
+        // yang sudah ada barisnya tidak boleh ditimpa dari perangkat.
+        keterangan: _dariProduksi ? _tag : null,
+      );
+      _dariProduksi = false;
       _pesan = 'Tag OK $idTagOk siap dihitung.';
       return true;
     } on ApiException catch (e) {

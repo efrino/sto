@@ -144,8 +144,12 @@ class ApiGateway implements StoApi {
       _api.fetchTagOk(nik, idTagOk);
 
   @override
-  Future<TagOk> openTagOk(String nik, String idTagOk) =>
-      _api.openTagOk(nik, idTagOk);
+  Future<TagOk> fetchTagOkPrepare(String nik, String idTagOk) =>
+      _api.fetchTagOkPrepare(nik, idTagOk);
+
+  @override
+  Future<TagOk> openTagOk(String nik, String idTagOk, {TagOk? keterangan}) =>
+      _api.openTagOk(nik, idTagOk, keterangan: keterangan);
 
   @override
   Future<TagOk> scanTagOk(String nik, String idTagOk, int qty) =>

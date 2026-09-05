@@ -52,6 +52,10 @@ class ApiEndpoints {
   /// GET  ?nik=&id_tag_ok=   -> satu Tag OK beserta keadaannya
   static const String tagOk = '/sto/tag-ok';
 
+  /// GET ?nik=&id_tag_ok= -> detail tag dari sumber produksi (welding),
+  /// dipakai saat tag belum terdaftar pada STO. Milik tim backend lain.
+  static const String tagOkPrepare = '/sto/tag-ok-prepare';
+
   /// POST { nik, id_tag_ok } -> menyiapkan Tag OK (scan_open = 1)
   static const String tagOkOpen = '/sto/tag-ok-open';
 

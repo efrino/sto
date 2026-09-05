@@ -177,8 +177,16 @@ abstract class StoApi {
   /// Satu Tag OK beserta keadaannya. Melempar [ApiException] bila tidak ada.
   Future<TagOk> fetchTagOk(String nik, String idTagOk);
 
+  /// Detail tag dari sumber produksi, untuk tag yang belum terdaftar pada
+  /// STO. Melempar [ApiException] bila tagnya memang tidak ada.
+  Future<TagOk> fetchTagOkPrepare(String nik, String idTagOk);
+
   /// Menyiapkan Tag OK: menandainya siap dihitung.
-  Future<TagOk> openTagOk(String nik, String idTagOk);
+  ///
+  /// [keterangan] dikirim untuk tag yang belum terdaftar - job number, qty
+  /// kanban, project, dan customer tidak ada di tabel sumber, jadi ikut dari
+  /// hasil [fetchTagOkPrepare] supaya barisnya lengkap sejak didaftarkan.
+  Future<TagOk> openTagOk(String nik, String idTagOk, {TagOk? keterangan});
 
   /// Mencatat hasil hitung fisik lalu menutup Tag OK.
   Future<TagOk> scanTagOk(String nik, String idTagOk, int qty);
@@ -1114,10 +1122,27 @@ class HttpStoApi implements StoApi {
   }
 
   @override
-  Future<TagOk> openTagOk(String nik, String idTagOk) async {
+  Future<TagOk> fetchTagOkPrepare(String nik, String idTagOk) async {
+    final body = await _client.get(ApiEndpoints.tagOkPrepare, query: {
+      'nik': nik,
+      'id_tag_ok': idTagOk,
+    });
+    return _tagOkDari(body);
+  }
+
+  @override
+  Future<TagOk> openTagOk(String nik, String idTagOk, {TagOk? keterangan}) async {
     final body = await _client.post(ApiEndpoints.tagOkOpen, {
       'nik': nik,
       'id_tag_ok': idTagOk,
+      if (keterangan != null) ...{
+        'process': keterangan.process,
+        'job_number': keterangan.jobNumber,
+        'qty_kbn': keterangan.qtyKbn,
+        'project': keterangan.project,
+        'customer': keterangan.customer,
+        'area': keterangan.area,
+      },
     });
     return _tagOkDari(body);
   }
