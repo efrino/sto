@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_feedback.dart';
+import '../../core/utils/formatters.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../data/models/sto_event.dart';
 import '../../state/admin_provider.dart';
+import 'widgets/kotak_cari.dart';
 import '../../state/session_provider.dart';
 import 'widgets/sync_notice.dart';
 import 'widgets/area_picker.dart';
@@ -100,9 +102,36 @@ class _AdminEventsPageState extends State<AdminEventsPage> {
     admin.clearMessage();
   }
 
+  final _cari = TextEditingController();
+  String _kunci = '';
+
+  @override
+  void dispose() {
+    _cari.dispose();
+    super.dispose();
+  }
+
+  /// Event yang cocok - namanya, id-nya, atau tanggalnya.
+  List<StoEvent> _tersaring(List<StoEvent> semua) {
+    final k = _kunci.trim().toLowerCase();
+    if (k.isEmpty) return semua;
+
+    return semua.where((e) {
+      final ladang = [
+        e.name,
+        e.id,
+        Formatters.date(e.startDate),
+        Formatters.date(e.endDate),
+        e.status.name,
+      ].join(' ').toLowerCase();
+      return ladang.contains(k);
+    }).toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();
+    final daftar = _tersaring(admin.events);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Event STO')),
@@ -115,6 +144,14 @@ class _AdminEventsPageState extends State<AdminEventsPage> {
         children: [
           if (admin.peringatanSinkron != null)
             SyncNotice(message: admin.peringatanSinkron!),
+          if (admin.events.isNotEmpty)
+            KotakCari(
+              controller: _cari,
+              petunjuk: 'Cari nama event / tanggal',
+              jumlah: daftar.length,
+              dari: admin.events.length,
+              onUbah: (nilai) => setState(() => _kunci = nilai),
+            ),
           Expanded(
             child: admin.loading && admin.events.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -128,12 +165,19 @@ class _AdminEventsPageState extends State<AdminEventsPage> {
                     actionLabel: 'Buat event',
                     onAction: () => _openForm(),
                   )
+                : daftar.isEmpty
+                ? EmptyState(
+                    icon: Icons.search_off,
+                    title: 'Tidak ada event yang cocok',
+                    message: 'Coba kata kunci lain, atau kosongkan '
+                        'pencariannya untuk melihat semua event.',
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                    itemCount: admin.events.length,
+                    itemCount: daftar.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
-                      final event = admin.events[index];
+                      final event = daftar[index];
                       final aktif = event.isActiveOn(DateTime.now());
                       return _EventTile(
                         event: event,

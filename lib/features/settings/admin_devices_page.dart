@@ -40,6 +40,15 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
   /// server lagi, terus-menerus.
   String? _signaturPengguna;
 
+  final _cari = TextEditingController();
+  String _kunci = '';
+
+  @override
+  void dispose() {
+    _cari.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -326,8 +335,34 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
                   icon: Icons.devices_other,
                   child: Column(
                     children: [
+                      // Pencarian menyaring nama, kode, maupun NIK yang
+                      // terpasang - admin biasanya mencari lewat NIK operator
+                      // yang mengeluh, bukan lewat nama perangkatnya.
+                      if (devices.devices.length > 3)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: TextField(
+                            controller: _cari,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: 'Cari perangkat / NIK terpasang',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: _kunci.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      icon: const Icon(Icons.close, size: 18),
+                                      onPressed: () {
+                                        _cari.clear();
+                                        setState(() => _kunci = '');
+                                      },
+                                    ),
+                            ),
+                            onChanged: (n) => setState(() => _kunci = n),
+                          ),
+                        ),
                       for (final device in devices.devices
-                          .where((d) => d.deviceId != current?.deviceId)) ...[
+                          .where((d) => d.deviceId != current?.deviceId)
+                          .where(_cocok)) ...[
                         _kartuPerangkat(device, ini: false),
                         const Divider(height: 24),
                       ],
@@ -412,6 +447,23 @@ class _AdminDevicesPageState extends State<AdminDevicesPage> {
     AppFeedback.info(context, devices.message ?? 'Selesai.');
     devices.clearMessage();
     await _muatPengguna();
+  }
+
+  /// true bila perangkat cocok dengan kata kunci - nama, kode, atau NIK
+  /// yang terpasang padanya.
+  bool _cocok(dynamic device) {
+    final k = _kunci.trim().toLowerCase();
+    if (k.isEmpty) return true;
+
+    final niks = (_pengguna[device.serverId] ?? const <AppUser>[])
+        .map((u) => '${u.nik} ${u.name}')
+        .join(' ');
+    return [
+      '${device.label}',
+      '${device.name}',
+      '${device.deviceId}',
+      niks,
+    ].join(' ').toLowerCase().contains(k);
   }
 
   Widget _kartuPerangkat(StoDevice device, {required bool ini}) {

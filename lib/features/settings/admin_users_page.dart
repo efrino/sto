@@ -7,6 +7,7 @@ import '../../core/widgets/app_feedback.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../data/models/app_user.dart';
 import '../../state/admin_provider.dart';
+import 'widgets/kotak_cari.dart';
 import '../../state/session_provider.dart';
 import 'widgets/area_picker.dart';
 import 'widgets/sync_notice.dart';
@@ -96,9 +97,37 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     admin.clearMessage();
   }
 
+  final _cari = TextEditingController();
+  String _kunci = '';
+
+  @override
+  void dispose() {
+    _cari.dispose();
+    super.dispose();
+  }
+
+  /// User yang cocok dengan kata kunci - NIK, nama, tim, atau areanya.
+  List<AppUser> _tersaring(List<AppUser> semua) {
+    final k = _kunci.trim().toLowerCase();
+    if (k.isEmpty) return semua;
+
+    return semua.where((u) {
+      final ladang = [
+        u.nik,
+        u.name,
+        u.team,
+        u.role.label,
+        u.areas.join(' '),
+        u.permissionLabel,
+      ].join(' ').toLowerCase();
+      return ladang.contains(k);
+    }).toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();
+    final daftar = _tersaring(admin.users);
 
     return Scaffold(
       appBar: AppBar(title: const Text('User & Izin')),
@@ -111,6 +140,14 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
         children: [
           if (admin.peringatanSinkron != null)
             SyncNotice(message: admin.peringatanSinkron!),
+          if (admin.users.isNotEmpty)
+            KotakCari(
+              controller: _cari,
+              petunjuk: 'Cari NIK / nama / tim / area',
+              jumlah: daftar.length,
+              dari: admin.users.length,
+              onUbah: (nilai) => setState(() => _kunci = nilai),
+            ),
           Expanded(
             child: admin.loading && admin.users.isEmpty
                 ? const Center(child: CircularProgressIndicator())
@@ -124,12 +161,19 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     actionLabel: 'Tambah user',
                     onAction: () => _openForm(),
                   )
+                : daftar.isEmpty
+                ? EmptyState(
+                    icon: Icons.search_off,
+                    title: 'Tidak ada user yang cocok',
+                    message: 'Coba kata kunci lain, atau kosongkan '
+                        'pencariannya untuk melihat semua user.',
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                    itemCount: admin.users.length,
+                    itemCount: daftar.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
-                      final user = admin.users[index];
+                      final user = daftar[index];
                       return _UserTile(
                         user: user,
                         onEdit: () => _openForm(user: user),
