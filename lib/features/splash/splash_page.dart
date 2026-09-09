@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../app.dart';
 import '../../core/config/app_config.dart';
+import '../../core/di/dependencies.dart';
 import '../../core/theme/app_colors.dart';
 import '../../state/admin_provider.dart';
 import '../../state/printer_provider.dart';
@@ -57,12 +58,32 @@ class _SplashPageState extends State<SplashPage> {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
 
-    Navigator.pushReplacementNamed(
-      context,
-      session.status == SessionStatus.authenticated
-          ? AppRoutes.home
-          : AppRoutes.login,
-    );
+    // Perangkat yang belum bernama diantar ke layar penamaan lebih dulu.
+    // Namun bila ANDROID_ID perangkat ini sudah terdaftar di server
+    // (mis. habis uninstall lalu install ulang), nama perangkat langsung
+    // dipulihkan dari server tanpa perlu ditanyakan lagi ke operator.
+    var namaPerangkat = await context.read<AppDependencies>()
+        .prefs
+        .namaPerangkat();
+    if (namaPerangkat.trim().isEmpty) {
+      final pulih = await context
+          .read<AppDependencies>()
+          .deviceRepository
+          .pulihkanNamaDariServer();
+      if (pulih != null && pulih.isNotEmpty) {
+        await context.read<AppDependencies>().prefs.setNamaPerangkat(pulih);
+        namaPerangkat = pulih;
+      }
+    }
+    if (!mounted) return;
+
+    final tujuan = session.status == SessionStatus.authenticated
+        ? AppRoutes.home
+        : (namaPerangkat.trim().isEmpty
+            ? AppRoutes.namaPerangkat
+            : AppRoutes.login);
+
+    Navigator.pushReplacementNamed(context, tujuan);
   }
 
   @override

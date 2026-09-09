@@ -31,6 +31,25 @@ class SequenceReservation {
   int get length => end - start + 1;
 }
 
+/// Dilempar saat server menolak mencetak karena event-nya sedang menutup
+/// pencetakan (`allow_print = 0`).
+///
+/// Bukan kegagalan jaringan dan bukan kesalahan operator: keadaan yang memang
+/// diatur admin. Dipisahkan supaya layar bisa menampilkannya sebagai
+/// keterangan - "gagal membuat tag" di sini akan membuat operator mengulang
+/// terus, atau mengira handheldnya rusak.
+class ApiCetakDitutupException extends ApiException {
+  ApiCetakDitutupException(
+    super.message, {
+    super.statusCode,
+    super.body,
+    this.namaEvent = '',
+  });
+
+  /// Nama event yang menutup pencetakan; kosong bila server tidak menyebutnya.
+  final String namaEvent;
+}
+
 /// Dilempar saat print-tag menemukan lebih dari satu item untuk kriteria
 /// pencarian; pemanggil harus meminta operator memilih salah satu `id_item`.
 class ApiMultipleItemException extends ApiException {
@@ -86,6 +105,20 @@ abstract class StoApi {
   });
 
   Future<void> createBatch(PrintBatch batch, List<StoTag> tags);
+
+  /// Memindahkan pemasangan [nik] ke perangkat ini.
+  ///
+  /// Dipakai ketika login ditolak karena NIK-nya terpasang di perangkat lain -
+  /// mis. handheld yang habis baterai. NIK-nya sendiri tetap harus sudah
+  /// didaftarkan admin; endpoint ini tidak pernah membuat akun.
+  ///
+  /// Mengembalikan true bila memang berpindah, false bila ternyata sudah
+  /// terpasang di sini.
+  Future<bool> claimDevice({
+    required String nik,
+    required String androidId,
+    required String deviceName,
+  });
 
   /// Menandai lembaran tag benar-benar keluar dari printer.
   Future<void> confirmPrint(StoTag tag);
@@ -145,8 +178,9 @@ abstract class StoApi {
   /// Daftar percakapan beserta jumlah pesan belum dibaca.
   Future<List<ChatThread>> fetchChatThreads(String nik);
 
-  /// Isi satu percakapan; [afterId] > 0 hanya mengambil yang lebih baru.
-  Future<List<ChatMessage>> fetchChatMessages({
+  /// Isi satu percakapan beserta batas bacanya; [afterId] > 0 hanya
+  /// mengambil yang lebih baru.
+  Future<IsiUtas> fetchChatMessages({
     required String nik,
     required String thread,
     int afterId,
@@ -320,8 +354,15 @@ abstract class StoApi {
     required DateTime start,
     required DateTime end,
     bool berjalan = true,
+    bool bolehCetak = true,
+    int totalTim = 2,
   });
 
+  /// Ubah sebagian: yang null dibiarkan apa adanya di server.
+  ///
+  /// [bolehCetak] adalah `allow_print` - izin mencetak tag baru, terpisah dari
+  /// [berjalan] (`status`). Menjelang akhir pelaksanaan, pencetakan dihentikan
+  /// sementara hasil hitung masih terus masuk.
   Future<Map<String, dynamic>> updateEvent({
     required String adminNik,
     required int eventId,
@@ -329,6 +370,8 @@ abstract class StoApi {
     DateTime? start,
     DateTime? end,
     bool? berjalan,
+    bool? bolehCetak,
+    int? totalTim,
   });
 
   Future<Map<String, dynamic>> deleteEvent({
@@ -376,6 +419,20 @@ class HttpStoApi implements StoApi {
     final user = _userFromApi(data);
     if (user.nik.isEmpty) throw ApiException('NIK tidak terdaftar.');
     return user;
+  }
+
+  @override
+  Future<bool> claimDevice({
+    required String nik,
+    required String androidId,
+    required String deviceName,
+  }) async {
+    final body = await _client.post(ApiEndpoints.deviceClaim, {
+      'nik': nik,
+      'android_id': androidId,
+      'device_name': deviceName,
+    });
+    return (body is Map) && '${body['pindah'] ?? 0}' == '1';
   }
 
   /// Mendaftarkan user baru (dipakai admin dari menu Setting > User).
@@ -661,6 +718,8 @@ class HttpStoApi implements StoApi {
     required DateTime start,
     required DateTime end,
     bool berjalan = true,
+    bool bolehCetak = true,
+    int totalTim = 2,
   }) async {
     final body = await _client.post(ApiEndpoints.eventCreate, {
       'nik': adminNik,
@@ -668,6 +727,8 @@ class HttpStoApi implements StoApi {
       'start_date': _date(start),
       'end_date': _date(end),
       'status': berjalan ? 1 : 0,
+      'allow_print': bolehCetak ? 1 : 0,
+      'total_tim': totalTim,
     });
     // Hanya boleh ada satu event berjalan: server menahan permintaan ini
     // sampai admin menegaskan event mana yang harus ditutup.
@@ -687,6 +748,8 @@ class HttpStoApi implements StoApi {
     DateTime? start,
     DateTime? end,
     bool? berjalan,
+    bool? bolehCetak,
+    int? totalTim,
   }) async {
     final body = await _client.post(ApiEndpoints.eventUpdate, {
       'nik': adminNik,
@@ -695,6 +758,8 @@ class HttpStoApi implements StoApi {
       'start_date': ?_date(start),
       'end_date': ?_date(end),
       if (berjalan != null) 'status': berjalan ? 1 : 0,
+      if (bolehCetak != null) 'allow_print': bolehCetak ? 1 : 0,
+      'total_tim': ?totalTim,
     });
     _pastikanBukanConfirm(body);
     final data = _data(body);
@@ -726,6 +791,30 @@ class HttpStoApi implements StoApi {
   }
 
   // ------------------------------------------------------------------- tag
+  /// POST untuk endpoint pencetakan, dengan penolakan `allow_print`
+  /// diterjemahkan jadi [ApiCetakDitutupException].
+  ///
+  /// Kedua deployment (server pabrik dan sto-v2) membalas bentuk yang sama:
+  /// HTTP 403 dengan `allow_print: 0` beserta nama event-nya.
+  Future<dynamic> _cetak(String endpoint, Map<String, dynamic> payload) async {
+    try {
+      return await _client.post(endpoint, payload);
+    } on ApiException catch (e) {
+      final tubuh = e.body;
+      final ditutup = e.statusCode == 403 &&
+          tubuh != null &&
+          '${tubuh['allow_print'] ?? ''}' == '0';
+      if (!ditutup) rethrow;
+
+      throw ApiCetakDitutupException(
+        e.message,
+        statusCode: e.statusCode,
+        body: tubuh,
+        namaEvent: '${tubuh['event_name'] ?? ''}'.trim(),
+      );
+    }
+  }
+
   /// Membuat SATU tag di server. Backend memberi nomornya sendiri (`id_tag`),
   /// jadi aplikasi tidak perlu memesan blok nomor urut lebih dulu.
   @override
@@ -737,7 +826,7 @@ class HttpStoApi implements StoApi {
     int? eventId,
     String? nik,
   }) async {
-    final body = await _client.post(ApiEndpoints.printTag, {
+    final body = await _cetak(ApiEndpoints.printTag, {
       'area': area,
       if (partNumber != null && partNumber.isNotEmpty) 'part_number': partNumber,
       if (jobNumber != null && jobNumber.isNotEmpty) 'job_number': jobNumber,
@@ -1049,8 +1138,11 @@ class HttpStoApi implements StoApi {
       'nik': payload['nik'],
       'tim': AppUser.parseTeam(payload['tim'] ?? payload['team']),
       'qty': payload['qty'],
-      // Aplikasi sudah menjaga aturannya sendiri (koreksi hanya oleh pencatat
-      // yang sama), jadi kiriman ulang memang dimaksudkan menimpa.
+      // Kiriman ulang memang dimaksudkan menimpa: aplikasi hanya membuka
+      // koreksi bagi pencatatnya sendiri. Yang menjaga aturan itu tetap
+      // server - ia menolak (403) bila NIK pengirim bukan pencatat angka
+      // yang sudah ada, jadi `confirm` tidak bisa dipakai merebut hasil
+      // hitung rekan setim.
       'confirm': true,
     });
   }
@@ -1069,7 +1161,7 @@ class HttpStoApi implements StoApi {
   }
 
   @override
-  Future<List<ChatMessage>> fetchChatMessages({
+  Future<IsiUtas> fetchChatMessages({
     required String nik,
     required String thread,
     int afterId = 0,
@@ -1081,7 +1173,18 @@ class HttpStoApi implements StoApi {
       if (afterId > 0) 'after_id': '$afterId',
       'limit': '$limit',
     });
-    return _rows(body).map(ChatMessage.fromServer).toList();
+
+    // `dibaca_sampai` ada di tingkat response, sejajar `data` - bukan di
+    // dalam tiap baris pesan, karena batas bacanya memang satu untuk
+    // seluruh utas.
+    final batas = (body is Map)
+        ? int.tryParse('${body['dibaca_sampai'] ?? 0}') ?? 0
+        : 0;
+
+    return IsiUtas(
+      pesan: _rows(body).map(ChatMessage.fromServer).toList(),
+      dibacaSampai: batas,
+    );
   }
 
   @override
@@ -1139,22 +1242,11 @@ class HttpStoApi implements StoApi {
 
   @override
   Future<TagOk> fetchTagOkPrepare(String nik, String idTagOk) async {
-    final query = {'nik': nik, 'id_tag_ok': idTagOk};
-    try {
-      return _tagOkDari(
-        await _client.get(ApiEndpoints.tagOkPrepare, query: query),
-      );
-    } on ApiException {
-      // Endpoint ini hanya ada di salah satu deployment: server pabrik dan
-      // mspin menjalankan salinan kode yang berbeda. Daripada memaksa
-      // operator berpindah alamat server, sisi satunya dicoba langsung.
-      final cadangan = await _client.getAbsolute(
-        AppConfig.serverPilihan.values,
-        ApiEndpoints.tagOkPrepare,
-        query: query,
-      );
-      return _tagOkDari(cadangan);
-    }
+    final body = await _client.get(
+      ApiEndpoints.tagOkPrepare,
+      query: {'nik': nik, 'id_tag_ok': idTagOk},
+    );
+    return _tagOkDari(body);
   }
 
   @override

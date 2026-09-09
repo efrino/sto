@@ -207,8 +207,22 @@ class _EventTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  static Color _warnaJadwal(JadwalEvent j) => switch (j) {
+        JadwalEvent.berjalan => AppColors.success,
+        JadwalEvent.akanDatang => AppColors.info,
+        JadwalEvent.terlewat => AppColors.danger,
+      };
+
+  static IconData _ikonJadwal(JadwalEvent j) => switch (j) {
+        JadwalEvent.berjalan => Icons.play_circle_outline,
+        JadwalEvent.akanDatang => Icons.schedule,
+        JadwalEvent.terlewat => Icons.history_toggle_off,
+      };
+
   @override
   Widget build(BuildContext context) {
+    final jadwal = event.jadwalPada(DateTime.now());
+
     return InkWell(
       onTap: onEdit,
       borderRadius: BorderRadius.circular(14),
@@ -267,6 +281,25 @@ class _EventTile extends StatelessWidget {
                 color: AppColors.textPrimary,
               ),
             ),
+            // Jadwalnya ditulis relatif terhadap hari ini. Tanggal saja
+            // menuntut pembacanya menghitung sendiri, dan justru event yang
+            // sudah lewat - yang paling perlu disadari - paling mudah lolos
+            // dari perhatian karena statusnya masih BUKA.
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(_ikonJadwal(jadwal), size: 13, color: _warnaJadwal(jadwal)),
+                const SizedBox(width: 4),
+                Text(
+                  event.jadwalLabel(),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: _warnaJadwal(jadwal),
+                  ),
+                ),
+              ],
+            ),
             Text(
               'Area: ${event.areaLabel}',
               style: const TextStyle(
@@ -323,6 +356,8 @@ class _EventFormState extends State<_EventForm> {
   late DateTime _end;
   late List<String> _areas;
   late StoEventStatus _status;
+  late bool _bolehCetak;
+  late int _totalTim;
 
   @override
   void initState() {
@@ -334,6 +369,8 @@ class _EventFormState extends State<_EventForm> {
     _end = event?.endDate ?? DateTime(now.year, now.month + 1, 0);
     _areas = List<String>.from(event?.areas ?? const []);
     _status = event?.status ?? StoEventStatus.open;
+    _bolehCetak = event?.bolehCetak ?? true;
+    _totalTim = event?.totalTim ?? 2;
   }
 
   @override
@@ -375,6 +412,8 @@ class _EventFormState extends State<_EventForm> {
         endDate: _end,
         areas: _areas,
         status: _status,
+        bolehCetak: _bolehCetak,
+        totalTim: _totalTim,
         createdBy: widget.event?.createdBy ?? widget.createdBy,
         createdAt: widget.event?.createdAt ?? now,
       ),
@@ -452,9 +491,55 @@ class _EventFormState extends State<_EventForm> {
               title: const Text('Event dibuka'),
               subtitle: const Text(
                 'Tutup bila periode selesai - operator langsung tidak bisa '
-                'membuat tag baru.',
+                'membuat tag baru maupun mengirim hasil hitung.',
                 style: TextStyle(fontSize: 12),
               ),
+            ),
+            // Izin cetak dipisahkan dari status buka/tutup karena keduanya
+            // memang keputusan yang berbeda. Menjelang akhir pelaksanaan,
+            // pencetakan tag berhenti lebih dulu sementara perhitungan masih
+            // berjalan berjam-jam; menutup eventnya akan ikut menghentikan
+            // hasil hitung yang justru sedang ditunggu.
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _bolehCetak,
+              onChanged: _status == StoEventStatus.open
+                  ? (value) => setState(() => _bolehCetak = value)
+                  : null,
+              title: const Text('Boleh mencetak tag baru'),
+              subtitle: Text(
+                _status == StoEventStatus.open
+                    ? 'Matikan untuk menghentikan pencetakan tag, sementara '
+                        'hasil hitung tetap boleh masuk.'
+                    : 'Event yang ditutup tidak bisa mencetak apa pun.',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Jumlah tim penghitung. Server menyimpannya sebagai `total_tim`;
+            // aplikasi belum memakainya untuk membatasi apa pun - yang
+            // ditegakkan sejauh ini tetap slot A/B pada tiap tag.
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Jumlah tim penghitung',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                ),
+                SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 1, label: Text('1 tim')),
+                    ButtonSegment(value: 2, label: Text('2 tim')),
+                  ],
+                  selected: {_totalTim},
+                  onSelectionChanged: (pilihan) =>
+                      setState(() => _totalTim = pilihan.first),
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             ElevatedButton.icon(

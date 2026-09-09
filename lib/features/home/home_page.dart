@@ -8,6 +8,8 @@ import '../../core/widgets/app_feedback.dart';
 import '../../core/widgets/section_card.dart';
 import '../../data/models/app_user.dart';
 import '../../data/models/print_entry.dart';
+import '../../data/models/sto_event.dart';
+import 'widgets/teks_berjalan.dart';
 import '../../state/chat_provider.dart';
 import '../../state/admin_provider.dart';
 import '../../state/count_provider.dart';
@@ -15,6 +17,33 @@ import '../../state/prepare_provider.dart';
 import '../../state/print_history_provider.dart';
 import '../../state/printer_provider.dart';
 import '../../state/session_provider.dart';
+
+/// Pemegang kepala layar yang menempel di atas.
+///
+/// Tingginya tetap - tidak mengecil saat digulir. Kepala yang menyusut
+/// membuat isinya berpindah-pindah tempat, dan tombol keluar termasuk yang
+/// paling tidak boleh berpindah: menekannya karena salah sasaran berarti
+/// sesi operator berakhir di tengah pekerjaan.
+class _KepalaTetap extends SliverPersistentHeaderDelegate {
+  const _KepalaTetap({required this.tinggi, required this.anak});
+
+  final double tinggi;
+  final Widget anak;
+
+  @override
+  double get minExtent => tinggi;
+
+  @override
+  double get maxExtent => tinggi;
+
+  @override
+  Widget build(BuildContext context, double geser, bool tumpangTindih) =>
+      SizedBox.expand(child: anak);
+
+  @override
+  bool shouldRebuild(_KepalaTetap lama) =>
+      lama.tinggi != tinggi || lama.anak != anak;
+}
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -107,38 +136,49 @@ class _HomePageState extends State<HomePage> {
         onRefresh: _refresh,
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: _header(
-                user?.name ?? '-',
-                user?.nik ?? '-',
-                user?.role.label ?? '-',
-                user?.areaLabel ?? '-',
+            // Menempel di atas saat digulir. Tombol keluar ada di kepala ini,
+            // dan pada handheld yang dipakai bergantian antar-shift, orang
+            // yang mau keluar seharusnya tidak perlu menggulir ke atas dulu
+            // untuk mencarinya.
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _KepalaTetap(
+                tinggi: _tinggiKepala(context),
+                anak: _header(
+                  user?.name ?? '-',
+                  user?.nik ?? '-',
+                  user?.role.label ?? '-',
+                  user?.areaLabel ?? '-',
+                  printer,
+                ),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  _printerCard(printer),
-                  const SizedBox(height: 14),
+                  // Event ditaruh di atas ringkasan: tanpa event yang
+                  // berjalan, angka apa pun di bawahnya tidak akan bertambah
+                  // hari ini - itu yang perlu diketahui lebih dulu.
+                  _pitaEvent(context.watch<AdminProvider>().eventDisorot),
+                  const SizedBox(height: 10),
                   _summaryCard(summary, cetak, counts, user),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   // Kartu aksi dibuat setara bentuknya, dan hanya yang
                   // haknya diberikan admin yang ditampilkan.
                   _actionRow(user),
-                  const SizedBox(height: 12),
                   // Tag OK memakai bentuk kartu yang sama dengan tag STO -
                   // aksinya memang sejenis. Yang membedakan hanya warnanya
                   // (navy) dan keterangan kecil di bawah judul, supaya
                   // operator tidak salah masuk menu saat terburu-buru.
                   if (user?.punyaTagOk ?? false) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _actionRowTagOk(user),
                   ],
-                  // Jarak lebih lebar sebelum Riwayat & Setting: keduanya
-                  // bukan aksi lapangan, jadi dipisahkan dari deretan kartu
-                  // kerja supaya tidak tertekan tanpa sengaja.
-                  const SizedBox(height: 20),
+                  // Jarak sedikit lebih lebar sebelum Riwayat & Setting:
+                  // keduanya bukan aksi lapangan, jadi dipisahkan dari
+                  // deretan kartu kerja supaya tidak tertekan tanpa sengaja.
+                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -174,7 +214,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Center(
                     child: Text(
                       '${AppConfig.appName} v1.0.0',
@@ -193,9 +233,91 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _header(String name, String nik, String peran, String area) {
+  // ------------------------------------------------- ukuran kepala layar
+  //
+  // Angka-angka ini dipakai DUA kali: oleh _header saat menggambar, dan oleh
+  // _tinggiKepala saat memberi tahu sliver berapa tinggi yang harus
+  // disediakan. Karena kepala ini menempel, sliver menuntut angka pasti - dan
+  // begitu keduanya ditulis terpisah, satu perubahan kecil pada tata letak
+  // membuatnya berselisih dan isinya meluber. Itu sudah terjadi dua kali.
+  static const double _kepalaAtas = 8;
+  static const double _kepalaBawah = 10;
+  static const double _kepalaLogo = 46;
+
+  static const TextStyle _gayaNama = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+    color: Colors.white,
+  );
+  static const TextStyle _gayaPeran = TextStyle(
+    fontSize: 11.5,
+    color: Colors.white70,
+  );
+  static const TextStyle _gayaArea = TextStyle(
+    fontSize: 11,
+    color: Colors.white60,
+  );
+
+  /// Tinggi kepala layar, diukur dari teks yang benar-benar dipakai.
+  ///
+  /// Diukur, bukan ditebak: tinggi baris bergantung pada font bawaan sistem,
+  /// gaya turunan dari tema, dan setelan ukuran huruf pemakainya. Tebakan
+  /// angka mati sudah dua kali meleset di H10.
+  double _tinggiKepala(BuildContext context) {
+    final mq = MediaQuery.of(context);
+
+    // Gaya dasar dari tema ikut disertakan - kalau tema memasang tinggi baris
+    // atau jenis huruf sendiri, mengukur dengan TextStyle telanjang akan
+    // menghasilkan angka yang lebih pendek daripada yang digambar.
+    final dasar = DefaultTextStyle.of(context).style;
+
+    double tinggiBaris(TextStyle gaya) {
+      final pelukis = TextPainter(
+        // Huruf berkaki-atas dan berkaki-bawah sekaligus, supaya yang terukur
+        // tinggi baris penuh - bukan tinggi huruf yang kebetulan pendek.
+        text: TextSpan(text: 'Ag', style: dasar.merge(gaya)),
+        maxLines: 1,
+        textScaler: mq.textScaler,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      return pelukis.height;
+    }
+
+    final tinggiTeks = tinggiBaris(_gayaNama) +
+        tinggiBaris(_gayaPeran) +
+        tinggiBaris(_gayaArea);
+
+    // Logo jadi batas bawah: pada setelan huruf terkecil, teksnya lebih
+    // pendek dari logo dan kepala akan terlihat gepeng.
+    final isi = tinggiTeks > _kepalaLogo ? tinggiTeks : _kepalaLogo;
+
+    // Sisa sedikit di luar hasil ukuran. Perangkat uji (H10, ukuran huruf
+    // sistem 1,15x) menggambar barisnya beberapa piksel lebih tinggi daripada
+    // yang dilaporkan TextPainter, dan sebabnya belum tertelusuri. Sisa ini
+    // membuat FittedBox di bawah tidak perlu mengecilkan teks pada pemakaian
+    // biasa - ia tetap ada sebagai pengaman kalau selisihnya lebih besar di
+    // perangkat lain.
+    const sisa = 10.0;
+
+    return mq.padding.top + _kepalaAtas + isi + _kepalaBawah + sisa;
+  }
+
+  Widget _header(
+    String name,
+    String nik,
+    String peran,
+    String area,
+    PrinterProvider printer,
+  ) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 52, 16, 22),
+      // Jarak atas mengikuti bilah status perangkat, bukan angka mati -
+      // tingginya berbeda antara handheld dan HP pribadi bertakik.
+      padding: EdgeInsets.fromLTRB(
+        16,
+        MediaQuery.paddingOf(context).top + _kepalaAtas,
+        16,
+        _kepalaBawah,
+      ),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [AppColors.primary, AppColors.primaryDark],
@@ -207,8 +329,8 @@ class _HomePageState extends State<HomePage> {
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: _kepalaLogo,
+            height: _kepalaLogo,
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
@@ -223,129 +345,162 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+            // Jaring pengaman terakhir: kalau tinggi hasil ukuran meleset
+            // sekali pun, teksnya mengecil sedikit - bukan memunculkan pita
+            // kuning-hitam "overflow" di depan operator. Pada keadaan normal
+            // BoxFit.scaleDown tidak mengubah apa pun.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, maxLines: 1, style: _gayaNama),
+                  Text(
+                    // Akun server memakai NIK sebagai nama, jadi
+                    // menuliskannya dua kali hanya bikin ramai.
+                    name == nik ? peran : 'NIK $nik  -  $peran',
+                    maxLines: 1,
+                    style: _gayaPeran,
                   ),
-                ),
-                Text(
-                  // Akun server memakai NIK sebagai nama, jadi menuliskannya
-                  // dua kali hanya bikin ramai.
-                  name == nik ? peran : 'NIK $nik  -  $peran',
-                  style: const TextStyle(fontSize: 11.5, color: Colors.white70),
-                ),
-                Text(
-                  area,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Colors.white60),
-                ),
-              ],
+                  Text(area, maxLines: 1, style: _gayaArea),
+                ],
+              ),
             ),
           ),
-          IconButton(
-            tooltip: 'Keluar',
-            onPressed: _logout,
-            icon: const Icon(Icons.logout, color: Colors.white),
-          ),
+          const SizedBox(width: 10),
+          _printerIndicator(printer),
+          const SizedBox(width: 10),
+          _logoutButton(),
         ],
       ),
     );
   }
 
-  Widget _printerCard(PrinterProvider printer) {
-    final connected = printer.isConnected;
-    // Kartu bisa diketuk untuk mencoba lagi - pada pemasangan baru, printer
-    // biasanya "tidak terdeteksi" hanya karena izin Bluetooth belum diberikan,
-    // dan ketukan ini memunculkan permintaan izinnya lagi.
-    return InkWell(
-      onTap: connected || printer.busy ? null : () => printer.cobaLagi(),
-      borderRadius: BorderRadius.circular(14),
-      child: SectionCard(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: connected ? AppColors.successSoft : AppColors.warningSoft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              connected ? Icons.print : Icons.print_disabled,
-              color: connected ? AppColors.success : AppColors.warning,
+  /// Tombol keluar dengan aksen merah dan ikon shutdown (power_settings_new).
+  Widget _logoutButton() {
+    return Tooltip(
+      message: 'Keluar',
+      child: InkWell(
+        onTap: _logout,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(7.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: const Color(0xFFF87171).withValues(alpha: 0.7),
+              width: 1.2,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: const Icon(
+            Icons.power_settings_new,
+            size: 19,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Indikator printer di kepala layar: menampilkan label Printer dan
+  /// status Terhubung / Tidak terhubung. Ketuk untuk mencoba menyambung lagi.
+  Widget _printerIndicator(PrinterProvider printer) {
+    final connected = printer.isConnected;
+    final busy = printer.busy;
+    final statusText = busy
+        ? 'Menyambung...'
+        : (connected ? 'Terhubung' : 'Tidak terhubung');
+
+    final tooltip = connected
+        ? 'Printer tersambung (${printer.statusLabel})'
+        : (printer.sebabGagal ?? 'Printer belum tersambung - ketuk untuk coba lagi');
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: (connected || busy) ? null : () => printer.cobaLagi(),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: connected
+                    ? const Color(0xFF4ADE80).withValues(alpha: 0.55)
+                    : const Color(0xFFFBBF24).withValues(alpha: 0.55),
+                width: 1.1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Printer',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
+                Icon(
+                  connected ? Icons.print : Icons.print_disabled,
+                  size: 17,
+                  color: Colors.white,
                 ),
-                Text(
-                  printer.statusLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                // Sebab kegagalan ditulis apa adanya. "Printer belum
-                // tersambung" tanpa keterangan membuat operator menyangka
-                // printernya rusak, padahal biasanya hanya izin yang kurang.
-                if (!connected && printer.sebabGagal != null)
-                  Text(
-                    printer.sebabGagal!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      height: 1.3,
-                      color: AppColors.warning,
+                const SizedBox(width: 6),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Printer',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white70,
+                        height: 1.1,
+                      ),
                     ),
-                  )
-                else if (!connected)
-                  const Text(
-                    'Ketuk untuk mencoba menyambung',
-                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                  ),
+                    const SizedBox(height: 1),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          statusText,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: connected
+                                ? const Color(0xFF4ADE80)
+                                : const Color(0xFFFBBF24),
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        if (busy)
+                          const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.8,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        else
+                          Icon(
+                            connected ? Icons.check_circle : Icons.refresh,
+                            size: 11,
+                            color: connected
+                                ? const Color(0xFF4ADE80)
+                                : const Color(0xFFFBBF24),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          // Tidak ada tombol setelan di sini: printer disetel admin lewat
-          // Setting, dan angkanya berlaku untuk semua handheld. Yang
-          // dibutuhkan operator di halaman utama hanya tahu printernya siap
-          // atau tidak.
-          printer.busy
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  connected ? Icons.check_circle : Icons.refresh,
-                  size: 20,
-                  color: connected ? AppColors.success : AppColors.warning,
-                ),
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -440,6 +595,84 @@ class _HomePageState extends State<HomePage> {
     Color(0xFF0B1B33),
   ];
 
+  /// Keadaan event STO hari ini, sebagai pita satu baris.
+  ///
+  /// Dulu ini kartu setinggi tiga baris. Di layar handheld, tinggi itu cukup
+  /// mendorong satu baris menu turun ke bawah layar - dan operator yang
+  /// terburu-buru menggulir untuk mencari tombol yang seharusnya terlihat
+  /// sejak awal. Keterangannya sama lengkapnya, hanya berjalan mendatar.
+  Widget _pitaEvent(StoEvent? event) {
+    final (warna, latar, ikon, teks) = switch (event) {
+      null => (
+          AppColors.danger,
+          AppColors.dangerSoft,
+          Icons.event_busy,
+          'Belum ada event STO yang berjalan - tag belum bisa dibuat. '
+              'Minta admin membukanya lewat Setting > Event.',
+        ),
+      final StoEvent e => switch (e.jadwalPada(DateTime.now())) {
+          // Event berjalan, tapi pencetakan bisa saja ditutup admin. Keduanya
+          // harus terbaca berbeda: pita hijau bertuliskan "Berlangsung" di
+          // atas tombol cetak yang mati membuat operator menyangka
+          // aplikasinya rusak, lalu ia mencabut-sambung printer yang sehat.
+          JadwalEvent.berjalan when !e.bolehCetak => (
+              AppColors.warning,
+              AppColors.warningSoft,
+              Icons.print_disabled,
+              '${e.name}  -  ${e.periodLabel}  -  ${e.areaLabel}  -  '
+                  'pencetakan tag ditutup admin, hasil hitung tetap bisa '
+                  'dikirim',
+            ),
+          JadwalEvent.berjalan => (
+              AppColors.success,
+              AppColors.successSoft,
+              Icons.event_available,
+              '${e.name}  -  ${e.periodLabel}  -  ${e.areaLabel}  -  '
+                  '${e.jadwalLabel()}',
+            ),
+          JadwalEvent.akanDatang => (
+              AppColors.info,
+              AppColors.navySoft,
+              Icons.schedule,
+              '${e.name}  -  ${e.periodLabel}  -  ${e.jadwalLabel()}  -  '
+                  'tag belum bisa dibuat pada periode ini',
+            ),
+          JadwalEvent.terlewat => (
+              AppColors.danger,
+              AppColors.dangerSoft,
+              Icons.history_toggle_off,
+              '${e.name}  -  ${e.periodLabel}  -  ${e.jadwalLabel()}  -  '
+                  'tag belum bisa dibuat pada periode ini',
+            ),
+        },
+    };
+
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: latar,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(ikon, size: 15, color: warna),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TeksBerjalan(
+              teks: teks,
+              gaya: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: warna,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _summaryCard(
     Map<String, int> summary,
     PrintHistory cetak,
@@ -447,12 +680,15 @@ class _HomePageState extends State<HomePage> {
     AppUser? user,
   ) {
     return SectionCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       title: 'Ringkasan hari ini',
       // Tidak ada lagi tombol sinkron di sini: hasil scan dan keadaan cetak
       // dikirim ke server begitu terjadi, jadi angka di kartu ini memang
       // sudah yang terbaru - tombol sinkron hanya menyiratkan sebaliknya.
-      subtitle: context.watch<AdminProvider>().activeEvent?.name ??
-          'Langsung dari server',
+      //
+      // Nama event juga TIDAK ditulis di sini. Keterangannya sudah lengkap
+      // pada pita di atas; mengulangnya hanya memakan satu baris lagi pada
+      // layar yang justru sedang dihemat.
       icon: Icons.insights,
       child: Row(
         children: [
@@ -516,7 +752,7 @@ class _HomePageState extends State<HomePage> {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(12),
@@ -558,7 +794,10 @@ class _HomePageState extends State<HomePage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+        // Tinggi kartu ini dipangkas setelah diukur di H10: dua baris kartu
+        // aksi memakan hampir sepertiga layar, dan itu yang mendorong menu
+        // Pesan/Riwayat turun ke bawah lipatan.
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: warna,
@@ -569,8 +808,8 @@ class _HomePageState extends State<HomePage> {
         ),
         child: Column(
           children: [
-            Icon(icon, color: Colors.white, size: 34),
-            const SizedBox(height: 10),
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(height: 6),
             Text(
               title,
               maxLines: 1,
@@ -604,7 +843,7 @@ class _HomePageState extends State<HomePage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: AppColors.border),
@@ -619,7 +858,7 @@ class _HomePageState extends State<HomePage> {
                     child: Icon(icon, color: AppColors.navy, size: 26),
                   )
                 : Icon(icon, color: AppColors.navy, size: 26),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               label,
               maxLines: 1,

@@ -1,5 +1,6 @@
 package com.maj.sto_prep
 
+import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -35,6 +36,11 @@ class MainActivity : FlutterActivity() {
                 // Printer internal tersambung lewat Bluetooth; bila radionya
                 // mati, operator tinggal diantar ke setelannya.
                 "openBluetoothSettings" -> result.success(bukaSetelanBluetooth())
+                // Meminta sistem menyalakan Bluetooth lewat dialognya
+                // sendiri. Operator cukup menekan "Izinkan" tanpa keluar
+                // dari aplikasi - jauh lebih cepat daripada diantar ke
+                // halaman setelan lalu harus menemukan jalan kembali.
+                "nyalakanBluetooth" -> result.success(mintaNyalakanBluetooth())
                 else -> result.notImplemented()
             }
         }
@@ -75,6 +81,28 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         vendorPrinter.putus()
         super.onDestroy()
+    }
+
+    /**
+     * Memunculkan dialog sistem "Izinkan aplikasi menyalakan Bluetooth?".
+     *
+     * BluetoothAdapter.enable() sengaja TIDAK dipakai: sejak Android 13 ia
+     * tidak berlaku lagi bagi aplikasi biasa dan diam-diam mengembalikan
+     * false, sehingga radionya tidak pernah menyala dan tidak ada yang tahu
+     * sebabnya. ACTION_REQUEST_ENABLE tetap didukung di semua versi.
+     *
+     * Mengembalikan false bila dialognya tidak bisa dimunculkan - mis. izin
+     * BLUETOOTH_CONNECT belum diberikan di Android 12+. Sisi Dart yang
+     * memutuskan langkah berikutnya (mengantar ke halaman setelan).
+     */
+    private fun mintaNyalakanBluetooth(): Boolean = try {
+        startActivity(
+            Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        true
+    } catch (e: Exception) {
+        false
     }
 
     private fun bukaSetelanBluetooth(): Boolean = try {

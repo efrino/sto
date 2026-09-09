@@ -105,7 +105,18 @@ class ScannedTag {
         (json['part_type'] ?? json['type'] ?? 'FP').toString(),
       ),
       unit: (json['unit'] ?? json['uom'] ?? 'PCS').toString(),
-      printedBy: (json['created_by'] ?? json['printed_by'] ?? '-').toString(),
+      // NIK dulu, id belakangan: server mengirim keduanya, dan yang berguna
+      // di layar operator adalah NIK - "dicetak 57" tidak bisa ditanyakan
+      // ke siapa pun. NIK kosong (tag yang pencetaknya sudah dihapus) jatuh
+      // ke nomor id-nya, karena itu satu-satunya jejak yang tersisa.
+      printedBy: [
+        json['created_by_nik'],
+        json['printed_by'],
+        json['created_by'],
+      ].map((v) => '${v ?? ''}'.trim()).firstWhere(
+            (v) => v.isNotEmpty,
+            orElse: () => '-',
+          ),
       status: status,
       fromServer: true,
     );
@@ -198,6 +209,70 @@ class CountRepository {
             qty: qty,
             updatedAt: now,
             syncStatus: SyncStatus.pending,
+          );
+
+    final saved = await countDao.save(record);
+    await outboxDao.enqueue(
+      OutboxType.countSubmitted,
+      saved.tagNo,
+      saved.toApiJson(),
+    );
+    return saved;
+  }
+
+  /// Mengoreksi angka sebuah catatan yang sudah ada di riwayat.
+  ///
+  /// Berbeda dengan [submit] yang berangkat dari hasil scan, koreksi ini
+  /// berangkat dari baris riwayat - yang bisa saja dicatat lewat handheld
+  /// lain, sehingga tidak ada padanannya di database perangkat ini. Karena
+  /// itu barisnya dicari dulu; kalau tidak ada, dibuat sebagai catatan baru
+  /// dengan waktu asli yang tetap dipertahankan.
+  ///
+  /// Aturan pemiliknya sama dengan di server: hanya NIK pencatat yang boleh
+  /// mengubah angkanya. Penjagaan di sini hanya supaya penolakannya terasa
+  /// seketika - server tetap memeriksa ulang.
+  Future<StoCount> ubahQty({
+    required StoCount lama,
+    required AppUser user,
+    required int qty,
+  }) async {
+    if (lama.nik != user.nik) {
+      throw CountRuleException(
+        'Angka ${lama.tagNo} dicatat ${lama.nik}. Koreksi hanya boleh '
+        'oleh pencatatnya.',
+      );
+    }
+    if (qty < 0) {
+      throw CountRuleException('Qty tidak boleh negatif.');
+    }
+    if (qty == lama.qty) {
+      throw CountRuleException('Angkanya sama dengan yang tersimpan.');
+    }
+
+    final lokal = await countDao.findByTagAndTeam(lama.tagNo, lama.team);
+    final sekarang = DateTime.now();
+
+    // Baris riwayat membawa id milik SERVER. Kalau catatannya belum pernah
+    // ada di perangkat ini, id itu tidak boleh ikut: nomornya akan mengarah
+    // ke baris lokal milik tag lain yang kebetulan bernomor sama.
+    final record = lokal != null
+        ? lokal.copyWith(
+            qty: qty,
+            updatedAt: sekarang,
+            syncStatus: SyncStatus.pending,
+          )
+        : StoCount(
+            tagNo: lama.tagNo,
+            nik: lama.nik,
+            team: lama.team,
+            qty: qty,
+            partNumber: lama.partNumber,
+            jobNumber: lama.jobNumber,
+            partName: lama.partName,
+            area: lama.area,
+            unit: lama.unit,
+            countedAt: lama.countedAt,
+            updatedAt: sekarang,
           );
 
     final saved = await countDao.save(record);

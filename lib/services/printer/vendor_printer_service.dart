@@ -39,6 +39,24 @@ class VendorPrinterService implements PrinterService {
   @override
   PrinterState get state => _state;
 
+  /// Jalur pabrikan tidak mengabari perubahan apa pun - keadaannya hanya
+  /// berubah lewat method di kelas ini.
+  @override
+  Stream<PrinterState>? get aliranKeadaan => null;
+
+  @override
+  Future<PrinterState> periksaSambungan() async {
+    // Service pabrikan ditanya langsung: ia hidup di proses lain, dan bisa
+    // saja sudah mati tanpa aplikasi ini tahu.
+    try {
+      final tersambung = await _channel.invokeMethod<bool>('tersambung') ?? false;
+      _state = tersambung ? PrinterState.connected : PrinterState.disconnected;
+    } catch (_) {
+      // Tidak terjawab - ingatan yang ada tetap dipakai.
+    }
+    return _state;
+  }
+
   @override
   PrinterDevice? get currentDevice =>
       _state == PrinterState.connected ? perangkat : null;

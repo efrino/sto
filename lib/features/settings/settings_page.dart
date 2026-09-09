@@ -324,7 +324,10 @@ class _SettingsPageState extends State<SettingsPage> {
   String _eventSubtitle(BuildContext context) {
     final event = context.watch<AdminProvider>().activeEvent;
     if (event == null) return 'Belum ada event aktif - operator tidak bisa cetak';
-    return '${event.name} (${event.periodLabel})';
+    // Jadwalnya ikut ditulis: event yang berstatus BUKA tapi tanggalnya
+    // sudah lewat kelihatan sehat dari daftar, dan admin baru tahu setelah
+    // operator melapor tagnya ditolak.
+    return '${event.name} (${event.periodLabel}) - ${event.jadwalLabel()}';
   }
 
   Widget _tile({

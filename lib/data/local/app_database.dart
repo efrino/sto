@@ -13,7 +13,7 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._();
 
   static const String dbName = 'sto_prep.db';
-  static const int dbVersion = 7;
+  static const int dbVersion = 8;
 
   static const String tableParts = 'parts';
   static const String tableTags = 'tags';
@@ -167,6 +167,8 @@ class AppDatabase {
         end_date   TEXT NOT NULL,
         areas      TEXT,
         status     TEXT NOT NULL DEFAULT 'open',
+        allow_print INTEGER DEFAULT 1,
+        total_tim   INTEGER DEFAULT 2,
         created_by TEXT,
         created_at TEXT
       )
@@ -320,6 +322,15 @@ class AppDatabase {
 
     if (oldVersion < 7) {
       await _migrasiV7(db);
+    }
+
+    if (oldVersion < 8) {
+      // v8: izin cetak & jumlah tim pada event (allow_print, total_tim di
+      // server). Keduanya diberi nilai bawaan yang PERMISIF - handheld yang
+      // sedang offline saat pembaruan tidak boleh mendadak menolak mencetak
+      // hanya karena catatan lamanya belum punya kolom ini.
+      await _addColumnIfMissing(db, tableEvents, 'allow_print', 'INTEGER DEFAULT 1');
+      await _addColumnIfMissing(db, tableEvents, 'total_tim', 'INTEGER DEFAULT 2');
     }
   }
 

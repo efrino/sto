@@ -276,19 +276,23 @@ class ApiClient {
       final status = body['status'];
 
       // REST_Controller menolak method yang tidak dikenal dengan
-      // {"status": false, "error": "..."}.
+      // {"status": false, "error": "Unknown method"}.
       if (status == false) {
+        final rawError = '${body['error'] ?? 'Endpoint tidak dikenal'}';
         throw ApiException(
-          '${body['error'] ?? 'Endpoint tidak dikenal'}',
+          _terjemahkanPesanBackend(rawError),
           statusCode: httpStatus,
         );
       }
 
       if (status == 'failed') {
+        final rawMsg = '${body['message'] ?? 'Permintaan ditolak server'}';
         throw ApiException(
-          '${body['message'] ?? 'Permintaan ditolak server'}',
+          _terjemahkanPesanBackend(rawMsg),
           statusCode: httpStatus,
-          errors: (body['errors'] as List?)?.map((e) => '$e').toList() ??
+          errors: (body['errors'] as List?)
+                  ?.map((e) => _terjemahkanPesanBackend('$e'))
+                  .toList() ??
               const [],
           body: Map<String, dynamic>.from(body),
         );
@@ -310,10 +314,66 @@ class ApiClient {
       return body;
     }
 
-    final message = body is Map && body['message'] != null
+    final rawMessage = body is Map && body['message'] != null
         ? '${body['message']}'
-        : 'Permintaan gagal (HTTP $httpStatus)';
+        : _pesanStatusHttp(httpStatus);
+    final message = _terjemahkanPesanBackend(rawMessage);
     throw ApiException(message, statusCode: httpStatus);
+  }
+
+  static String _terjemahkanPesanBackend(String pesan) {
+    final lower = pesan.toLowerCase().trim();
+    if (lower == 'unknown method' || lower.contains('unknown method')) {
+      return 'Layanan belum tersedia di server STO ini. Hubungi tim IT untuk pembaruan sistem.';
+    }
+    if (lower == 'invalid api key' || lower.contains('invalid api key')) {
+      return 'Kunci akses tidak valid atau telah kedaluwarsa.';
+    }
+    if (lower == 'unauthorized' || lower.contains('unauthorized')) {
+      return 'Sesi login telah berakhir atau akses ditolak. Silakan login kembali.';
+    }
+    if (lower == 'forbidden' || lower.contains('access forbidden')) {
+      return 'Anda tidak memiliki izin untuk melakukan tindakan ini.';
+    }
+    if (lower == 'not found' || lower == 'endpoint not found') {
+      return 'Layanan atau data yang diminta tidak ditemukan di server.';
+    }
+    if (lower == 'method not allowed') {
+      return 'Metode pengiriman data tidak didukung oleh server.';
+    }
+    if (lower == 'internal server error') {
+      return 'Terjadi kendala pada server STO. Silakan hubungi tim IT.';
+    }
+    return pesan;
+  }
+
+  static String _pesanStatusHttp(int status) {
+    switch (status) {
+      case 400:
+        return 'Permintaan data tidak valid (HTTP 400).';
+      case 401:
+        return 'Sesi login telah berakhir (HTTP 401). Silakan login kembali.';
+      case 403:
+        return 'Akses ditolak (HTTP 403). Anda tidak memiliki izin.';
+      case 404:
+        return 'Layanan atau data tidak ditemukan di server (HTTP 404).';
+      case 405:
+        return 'Layanan ini belum didukung oleh server (HTTP 405).';
+      case 408:
+        return 'Waktu tunggu permintaan habis (HTTP 408). Sinyal lemah, coba lagi.';
+      case 409:
+        return 'Terdapat konflik status data pada server (HTTP 409).';
+      case 500:
+        return 'Terjadi kendala pada server STO (HTTP 500). Hubungi tim IT.';
+      case 502:
+        return 'Server STO tidak merespons (HTTP 502 - Bad Gateway).';
+      case 503:
+        return 'Server STO sedang sibuk atau dalam pemeliharaan (HTTP 503).';
+      case 504:
+        return 'Waktu koneksi ke server habis (HTTP 504 - Gateway Timeout).';
+      default:
+        return 'Permintaan gagal diproses (HTTP $status).';
+    }
   }
 
   void close() => _client.close();

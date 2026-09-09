@@ -26,7 +26,32 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _muat());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _muat();
+      if (!mounted) return;
+      // Daftar menyegarkan dirinya selama layarnya terbuka: tanpa itu pesan
+      // baru hanya muncul kalau daftarnya ditarik turun.
+      final user = context.read<SessionProvider>().user;
+      if (user != null) context.read<ChatProvider>().mulaiDenyutDaftar(user);
+    });
+  }
+
+  /// Rujukan provider disimpan sejak dependensi terpasang.
+  ///
+  /// dispose() berjalan setelah widget dilepas dari pohon, jadi `context.read`
+  /// di sana melempar - dan denyut penyegarnya tidak pernah sempat berhenti.
+  ChatProvider? _chat;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chat = context.read<ChatProvider>();
+  }
+
+  @override
+  void dispose() {
+    _chat?.hentikanDenyutDaftar();
+    super.dispose();
   }
 
   Future<void> _muat() async {
@@ -196,10 +221,20 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     });
   }
 
+  /// Rujukan provider disimpan sejak dependensi terpasang - lihat catatan
+  /// yang sama pada _ChatPageState.
+  ChatProvider? _chat;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chat = context.read<ChatProvider>();
+  }
+
   @override
   void dispose() {
     // Denyut penyegar dihentikan begitu layarnya ditinggalkan.
-    context.read<ChatProvider>().tutupUtas();
+    _chat?.tutupUtas();
     _tulis.dispose();
     _gulir.dispose();
     super.dispose();
@@ -353,42 +388,70 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // NIK pengirim hanya ditulis untuk pesan orang lain - pada utas
+            // Pengirim hanya ditulis untuk pesan orang lain - pada utas
             // admin, yang membalas bisa berganti-ganti orang.
+            //
+            // Untuk admin yang ditulis "ADMIN", lencananya tidak ikut
+            // dipasang: dua kali kata yang sama berjajar tidak menambah
+            // keterangan apa pun.
             if (!milikSaya)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    m.fromNik,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                  // Operator hanya melihat NIK asing saat dibalas; penanda ini
-                  // yang memberitahunya bahwa jawaban itu datang dari orang
-                  // yang berwenang.
-                  if (m.dariAdmin) ...[
-                    const SizedBox(width: 6),
-                    _ChatRoomPageState._lencana(true),
-                  ],
-                ],
+              Text(
+                m.namaTampil,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: m.dariAdmin ? 0.4 : 0,
+                  color: m.dariAdmin ? AppColors.accent : AppColors.navy,
+                ),
               ),
             Text(
               m.body,
               style: const TextStyle(fontSize: 13.5, height: 1.35),
             ),
             const SizedBox(height: 2),
-            Text(
-              Formatters.ringkas(m.createdAt),
-              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  Formatters.ringkas(m.createdAt),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                if (milikSaya) ...[
+                  const SizedBox(width: 4),
+                  _centang(context.watch<ChatProvider>().keadaan(m, nik)),
+                ],
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Tanda kecil di sudut gelembung sendiri: jam (belum sampai), satu
+  /// centang (tersimpan di server), dua centang biru (sudah dibaca).
+  ///
+  /// Ini satu-satunya kabar yang didapat pengirim - tidak ada notifikasi di
+  /// perangkat lawan bicaranya. Tanpa tanda ini, satu-satunya cara memastikan
+  /// pesannya sampai adalah mengirimnya lagi.
+  Widget _centang(KirimPesan keadaan) {
+    switch (keadaan) {
+      case KirimPesan.mengirim:
+        return const Icon(Icons.schedule, size: 12, color: AppColors.textMuted);
+      case KirimPesan.gagal:
+        return const Icon(
+          Icons.error_outline,
+          size: 12,
+          color: AppColors.danger,
+        );
+      case KirimPesan.terkirim:
+        return const Icon(Icons.check, size: 13, color: AppColors.textMuted);
+      case KirimPesan.dibaca:
+        return const Icon(Icons.done_all, size: 14, color: AppColors.info);
+    }
   }
 
   Widget _kotakTulis(ChatProvider chat) {

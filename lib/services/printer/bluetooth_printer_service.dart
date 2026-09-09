@@ -41,6 +41,89 @@ class BluetoothPrinterService implements PrinterService {
   PrinterState _state = PrinterState.unknown;
   PrinterDevice? _device;
 
+  /// Kabar perubahan keadaan untuk pendengarnya (PrinterProvider).
+  final StreamController<PrinterState> _kabar =
+      StreamController<PrinterState>.broadcast();
+
+  StreamSubscription<int?>? _langganan;
+
+  @override
+  Stream<PrinterState> get aliranKeadaan {
+    // Langganan dibuat saat pertama kali ada yang mendengarkan, bukan di
+    // constructor: mode simulasi mengganti service tanpa pernah memakai yang
+    // ini, dan langganan yang menganggur tetap membangunkan plugin.
+    _mulaiMendengar();
+    return _kabar.stream;
+  }
+
+  void _mulaiMendengar() {
+    if (_langganan != null) return;
+    if (!Platform.isAndroid) return;
+
+    try {
+      _langganan = _printer.onStateChanged().listen(_terimaKeadaan);
+    } catch (_) {
+      // Perangkat/plugin tidak mengirim kabar - jalur periksaSambungan()
+      // tetap dipakai sebelum mencetak.
+    }
+  }
+
+  /// Menerjemahkan kabar plugin jadi keadaan printer.
+  ///
+  /// Radio yang dimatikan (STATE_OFF) berarti sambungan ke printer internal
+  /// ikut putus, walau tidak ada satu pun method di kelas ini yang dipanggil.
+  /// Inilah keadaan yang dulu membuat layar tetap menulis "Tersambung"
+  /// sementara kertasnya tidak pernah keluar.
+  void _terimaKeadaan(int? kode) {
+    switch (kode) {
+      case BlueThermalPrinter.STATE_OFF:
+      case BlueThermalPrinter.STATE_TURNING_OFF:
+      case BlueThermalPrinter.DISCONNECTED:
+      case BlueThermalPrinter.DISCONNECT_REQUESTED:
+        _ubahKeadaan(PrinterState.disconnected);
+        break;
+      case BlueThermalPrinter.CONNECTED:
+        _ubahKeadaan(PrinterState.connected);
+        break;
+      case BlueThermalPrinter.ERROR:
+        _ubahKeadaan(PrinterState.error);
+        break;
+      default:
+        // STATE_ON dan turunannya tidak berarti printernya tersambung -
+        // radionya menyala, sambungannya belum tentu. Dibiarkan apa adanya
+        // supaya tidak ada "tersambung" palsu ke arah sebaliknya.
+        break;
+    }
+  }
+
+  void _ubahKeadaan(PrinterState baru) {
+    if (_state == baru) return;
+    _state = baru;
+    if (!_kabar.isClosed) _kabar.add(baru);
+  }
+
+  @override
+  Future<PrinterState> periksaSambungan() async {
+    if (!Platform.isAndroid) return _state;
+
+    try {
+      final hidup = await _printer.isOn ?? false;
+      if (!hidup) {
+        _ubahKeadaan(PrinterState.disconnected);
+        return _state;
+      }
+
+      final tersambung = await _printer.isConnected ?? false;
+      _ubahKeadaan(
+        tersambung ? PrinterState.connected : PrinterState.disconnected,
+      );
+    } catch (_) {
+      // Tidak bisa ditanya - ingatan yang ada tetap dipakai, dan panggilan
+      // cetak sendiri yang akan gagal dengan pesannya sendiri.
+    }
+    return _state;
+  }
+
   @override
   PrinterState get state => _state;
 

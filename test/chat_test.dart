@@ -7,6 +7,97 @@ import 'package:sto_prep/data/models/chat_message.dart';
 /// dilewati dengan memanggil API langsung); yang diuji di sini bagian yang
 /// memang milik aplikasi: pembacaan respons dan penamaan utas.
 void main() {
+  group('NIK admin tidak ditampilkan', () {
+    // Login STO tidak memakai kata sandi - NIK saja sudah cukup untuk masuk.
+    // NIK admin yang terbaca operator berarti ia bisa masuk sebagai admin dan
+    // memberi izin apa pun kepada dirinya sendiri.
+    ChatMessage dari(String nik, {required bool admin}) => ChatMessage(
+          id: 3,
+          thread: 'A.10359',
+          fromNik: nik,
+          body: 'Sudah saya cek',
+          createdAt: DateTime(2026, 9, 8, 9),
+          dariAdmin: admin,
+        );
+
+    test('pesan admin ditulis ADMIN, bukan NIK-nya', () {
+      final m = dari('F.9964', admin: true);
+      expect(m.namaTampil, 'ADMIN');
+      expect(m.namaTampil, isNot(contains('F.9964')));
+    });
+
+    test('NIK operator tetap ditampilkan apa adanya', () {
+      // Sesama operator memang perlu saling mengenali - dan NIK operator
+      // tidak membuka pintu apa pun yang belum ia punya.
+      expect(dari('E.9948', admin: false).namaTampil, 'E.9948');
+    });
+  });
+
+  group('Centang pesan', () {
+    ChatMessage pesan({
+      int id = 10,
+      String dari = 'E.9948',
+      bool broadcast = false,
+      KirimPesan kirim = KirimPesan.terkirim,
+    }) =>
+        ChatMessage(
+          id: id,
+          thread: 'A.10359',
+          fromNik: dari,
+          body: 'Tag IFPP sudah selesai',
+          createdAt: DateTime(2026, 9, 7, 2, 14),
+          broadcast: broadcast,
+          kirim: kirim,
+        );
+
+    test('pesan orang lain tidak diberi centang', () {
+      // Centang adalah kabar untuk pengirim; di sisi penerima tidak ada yang
+      // perlu dikabarkan.
+      final m = pesan(dari: 'A.10359');
+      expect(
+        m.keadaanKirim(nik: 'E.9948', dibacaSampai: 99),
+        KirimPesan.terkirim,
+      );
+    });
+
+    test('satu centang selama lawan bicara belum membaca sejauh itu', () {
+      final m = pesan(id: 12);
+      expect(
+        m.keadaanKirim(nik: 'E.9948', dibacaSampai: 11),
+        KirimPesan.terkirim,
+      );
+    });
+
+    test('dua centang begitu batas bacanya melewati pesan', () {
+      final m = pesan(id: 12);
+      expect(
+        m.keadaanKirim(nik: 'E.9948', dibacaSampai: 12),
+        KirimPesan.dibaca,
+      );
+    });
+
+    test('pesan yang belum sampai server tetap bertanda jam', () {
+      // Nomornya sementara dan negatif, jadi batas baca berapa pun akan
+      // "melewatinya" - tanpa penjagaan ini, pesan yang belum terkirim
+      // justru tampil sudah dibaca.
+      final m = pesan(id: -1, kirim: KirimPesan.mengirim);
+      expect(
+        m.keadaanKirim(nik: 'E.9948', dibacaSampai: 15),
+        KirimPesan.mengirim,
+      );
+    });
+
+    test('pengumuman tidak pernah bercentang dua', () {
+      // Pembacanya banyak; batas baca yang ada cuma milik satu orang, dan
+      // dua centang akan terbaca sebagai "sudah dibaca semua".
+      final m = pesan(id: 5, broadcast: true);
+      expect(
+        m.keadaanKirim(nik: 'E.9948', dibacaSampai: 99),
+        KirimPesan.terkirim,
+      );
+    });
+  });
+
   group('Pembacaan pesan dari server', () {
     test('pesan biasa terbaca lengkap', () {
       final m = ChatMessage.fromServer({

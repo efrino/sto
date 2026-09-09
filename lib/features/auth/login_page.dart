@@ -49,6 +49,14 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (ok) {
+      // Perpindahan perangkat diberitahukan, tidak didiamkan: NIK ini kini
+      // tidak bisa dipakai lagi di perangkat sebelumnya, dan operator perlu
+      // tahu itu sebelum rekannya mencarinya di handheld yang lama.
+      final pindah = session.catatanPindahPerangkat;
+      if (pindah != null) {
+        AppFeedback.info(context, pindah);
+        session.catatanPindahPerangkat = null;
+      }
       Navigator.pushReplacementNamed(context, AppRoutes.home);
     } else {
       AppFeedback.error(context, session.error ?? 'Login gagal.');

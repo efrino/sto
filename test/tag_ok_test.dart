@@ -6,6 +6,39 @@ import 'package:sto_prep/data/models/tag_ok.dart';
 /// (scan_open = 0 + qty). Keadaan itu yang menentukan tombol mana yang boleh
 /// ditekan operator.
 void main() {
+  group('NIK admin pada pembatalan Tag OK', () {
+    // `canceled_by` ditimpa oleh siapa pun yang terakhir mengubah keadaannya.
+    // Saat DISETUJUI isinya admin yang memutuskan - dan server hanya
+    // mengizinkan admin memutuskan (403 untuk yang lain), jadi tag yang sudah
+    // dibatalkan pasti membawa NIK admin.
+    TagOk tag(int batal, String oleh) => TagOk.fromServer({
+          'id_tag_ok': 'MAJWLD0309260101455',
+          'area': 'WELD',
+          'part_number': '12904-06201',
+          'is_canceled': batal,
+          'canceled_by': oleh,
+        });
+
+    test('tag yang sudah dibatalkan menyebut ADMIN, bukan NIK', () {
+      final t = tag(1, 'F.9964');
+      expect(t.dibatalkan, isTrue);
+      expect(t.namaPembatal, 'ADMIN');
+      expect(t.namaPembatal, isNot(contains('F.9964')));
+    });
+
+    test('pengajuan yang belum diputuskan tetap menyebut pengajunya', () {
+      // Di sini isinya si pengaju - biasanya operator sendiri, dan justru
+      // perlu terlihat supaya admin tahu siapa yang mengajukan.
+      final t = tag(2, 'A.10359');
+      expect(t.menungguKeputusan, isTrue);
+      expect(t.namaPembatal, 'A.10359');
+    });
+
+    test('tag normal tanpa pembatal tidak menampilkan apa-apa', () {
+      expect(tag(0, '').namaPembatal, '-');
+    });
+  });
+
   Map<String, dynamic> baris({
     int scanOpen = 0,
     String openedBy = '',

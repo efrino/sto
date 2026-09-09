@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -167,17 +169,63 @@ class _StoHistoryViewState extends State<StoHistoryView> {
   /// layar dibangun ulang.
   bool _sudahCobaOtomatis = false;
 
+  /// Penyegaran berkala.
+  ///
+  /// Riwayat ini milik server dan bisa berubah dari handheld lain - tim
+  /// pasangan yang menghitung tag yang sama, atau admin yang memutuskan
+  /// pembatalan. Tanpa penyegaran, operator melihat keadaan saat layar
+  /// dibuka dan tidak tahu itu sudah basi.
+  ///
+  /// Yang ditarik hanya isinya; layar hanya dibangun ulang bila datanya
+  /// benar-benar berbeda (lihat refreshDiam), jadi daftar tidak berkedip
+  /// dan gulirannya tidak melompat.
+  static const Duration _selangSegar = Duration(seconds: 12);
+  Timer? _segar;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _muat());
+    _segar = Timer.periodic(_selangSegar, (_) => _segarkanDiam());
   }
 
   @override
   void dispose() {
+    _segar?.cancel();
     _cari.dispose();
     _debounce.dispose();
     super.dispose();
+  }
+
+  /// Provider disimpan sejak dependensi terpasang, bukan dicari lewat context
+  /// di dalam timer.
+  ///
+  /// Timer bisa berdenyut pada saat widget sudah dilepas dari pohon tapi
+  /// belum sempat di-dispose; `context.read` pada saat itu melempar
+  /// "deactivated widget's ancestor".
+  SessionProvider? _sesi;
+  PrintHistoryProvider? _cetak;
+  CountProvider? _hitung;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sesi = context.read<SessionProvider>();
+    _cetak = context.read<PrintHistoryProvider>();
+    _hitung = context.read<CountProvider>();
+  }
+
+  Future<void> _segarkanDiam() async {
+    if (!mounted) return;
+    final user = _sesi?.user;
+    if (user == null) return;
+
+    if (user.canPrepare || user.canCancel) {
+      await _cetak?.refreshDiam(user);
+    }
+    if (user.canScan) {
+      await _hitung?.refreshDiam();
+    }
   }
 
   Future<void> _muat() async {
@@ -522,6 +570,7 @@ class _StoHistoryViewState extends State<StoHistoryView> {
 
     return _kartu(
       warna: warna,
+      onTap: () => _detailCetak(entry),
       children: [
         _judul(entry.tagNo, label, warna, latar),
         const SizedBox(height: 3),
@@ -585,6 +634,7 @@ class _StoHistoryViewState extends State<StoHistoryView> {
   Widget _barisHitung(StoCount count) {
     return _kartu(
       warna: AppColors.success,
+      onTap: () => _detailHitung(count),
       children: [
         _judul(
           count.tagNo,
@@ -635,6 +685,9 @@ class _StoHistoryViewState extends State<StoHistoryView> {
             ),
             const Spacer(),
             StatusChip.sync(count.syncStatus),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right,
+                size: 16, color: AppColors.textMuted),
           ],
         ),
         if (count.pernahDikoreksi)
@@ -653,10 +706,235 @@ class _StoHistoryViewState extends State<StoHistoryView> {
     );
   }
 
+  // ------------------------------------------------------------ detail
+  /// Rincian satu hasil hitung, beserta jalan untuk mengoreksi angkanya.
+  ///
+  /// Kartu di daftar sengaja ringkas supaya banyak baris terbaca sekaligus;
+  /// yang tidak muat - area, waktu catat, waktu koreksi - ditaruh di sini.
+  Future<void> _detailHitung(StoCount count) async {
+    final user = context.read<SessionProvider>().user;
+    final miliknya = user != null && count.nik == user.nik;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _kepalaLembar(count.tagNo, 'Hasil hitung'),
+              const SizedBox(height: 12),
+              _rinci('Qty', '${count.qty} ${count.unit}', tebal: true),
+              _rinci('Part', count.partName),
+              _rinci('Part number', count.partNumber),
+              _rinci('Job number', count.jobNumber),
+              _rinci('Area', count.area),
+              _rinci('Pencatat', '${count.nik}  (tim ${count.team})'),
+              _rinci('Dihitung', Formatters.dateTime(count.countedAt)),
+              if (count.updatedAt != null)
+                _rinci('Dikoreksi', Formatters.dateTime(count.updatedAt!)),
+              _rinci('Pengiriman', count.syncStatus.label),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  // Aturan pemiliknya sama dengan yang dijaga server: hanya
+                  // pencatatnya yang boleh mengubah angka. Tombolnya tetap
+                  // ditampilkan bagi yang lain, tapi mati - supaya jelas
+                  // koreksinya ada, hanya bukan haknya.
+                  onPressed: miliknya
+                      ? () {
+                          Navigator.pop(sheet);
+                          _ubahQty(count);
+                        }
+                      : null,
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: Text(
+                    miliknya
+                        ? 'Ubah qty'
+                        : 'Hanya ${count.nik} yang boleh mengubah',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Rincian satu kejadian cetak - termasuk jejak pembatalannya.
+  Future<void> _detailCetak(PrintEntry entry) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _kepalaLembar(entry.tagNo, 'Tag STO'),
+              const SizedBox(height: 12),
+              _rinci('Part', entry.partName),
+              _rinci('Part number', entry.partNumber),
+              _rinci('Job number', entry.jobNumber),
+              _rinci('Area', entry.area),
+              _rinci('Keadaan cetak', entry.state.label),
+              _rinci('Dibuat', Formatters.dateTime(entry.createdAt)),
+              if (entry.printedAt != null)
+                _rinci('Dicetak', Formatters.dateTime(entry.printedAt!)),
+              if (entry.errorMessage.isNotEmpty)
+                _rinci('Kegagalan', entry.errorMessage),
+              if (entry.cancelReason.isNotEmpty)
+                _rinci('Alasan batal', entry.cancelReason),
+              if (entry.cancelRequestedBy.isNotEmpty)
+                _rinci('Diajukan oleh', entry.cancelRequestedBy),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _kepalaLembar(String tagNo, String jenis) => Row(
+        children: [
+          Expanded(
+            child: Text(
+              tagNo,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+          Text(
+            jenis,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      );
+
+  Widget _rinci(String nama, String isi, {bool tebal = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 108,
+              child: Text(
+                nama,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                isi.trim().isEmpty ? '-' : isi,
+                style: TextStyle(
+                  fontSize: tebal ? 14.5 : 12.5,
+                  fontWeight: tebal ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// Koreksi angka: dialog kecil berisi qty saja.
+  ///
+  /// Perubahannya langsung didorong ke server - riwayat ini dibaca juga oleh
+  /// admin dan tim pasangan, jadi angka yang tertinggal di perangkat sendiri
+  /// tidak ada gunanya.
+  Future<void> _ubahQty(StoCount count) async {
+    final user = context.read<SessionProvider>().user;
+    if (user == null) return;
+
+    final kolom = TextEditingController(text: '${count.qty}');
+    final angka = await showDialog<int>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Ubah qty ${count.tagNo}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tersimpan sekarang: ${count.qty} ${count.unit} '
+              '(tim ${count.team}).',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: kolom,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Qty baru',
+                suffixText: count.unit,
+              ),
+              onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v.trim())),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialog, int.tryParse(kolom.text.trim())),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    kolom.dispose();
+
+    if (angka == null || !mounted) return;
+
+    final counts = context.read<CountProvider>();
+    final hasil = await counts.ubahQty(lama: count, user: user, qty: angka);
+    if (!mounted) return;
+
+    if (hasil == null) {
+      AppFeedback.error(context, counts.message ?? 'Qty gagal diubah.');
+    } else {
+      AppFeedback.success(context, counts.message ?? 'Qty diubah.');
+    }
+    counts.clearMessage();
+  }
+
   /// Kerangka kartu dengan pita warna di kiri - dipakai kedua jenis baris
   /// supaya daftar gabungannya terbaca sebagai satu daftar, bukan dua yang
   /// kebetulan bersebelahan.
-  Widget _kartu({required Color warna, required List<Widget> children}) {
+  Widget _kartu({
+    required Color warna,
+    required List<Widget> children,
+    VoidCallback? onTap,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -664,7 +942,10 @@ class _StoHistoryViewState extends State<StoHistoryView> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
-      child: IntrinsicHeight(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -688,6 +969,7 @@ class _StoHistoryViewState extends State<StoHistoryView> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );

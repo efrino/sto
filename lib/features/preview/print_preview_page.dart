@@ -575,7 +575,7 @@ class _PrintPreviewPageState extends State<PrintPreviewPage> {
               width: 110,
               child: OutlinedButton(
                 onPressed: provider.printing ? null : _finish,
-                child: const Text('SELESAI'),
+                child: const Text('OK!'),
               ),
             ),
           ],

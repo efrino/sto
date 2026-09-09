@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kebijakan Privasi - Aplikasi STO</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+         max-width: 720px; margin: 0 auto; padding: 28px 20px 60px;
+         line-height: 1.65; color: #1c2430; background: #fff; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  h2 { font-size: 17px; margin-top: 30px; }
+  .tanggal { color: #6b7684; font-size: 13px; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { border: 1px solid #d9dee5; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f4f6f9; }
+  code { background: #f4f6f9; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  .catatan { background: #f4f6f9; border-left: 3px solid #2563a5;
+             padding: 12px 14px; margin: 18px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Kebijakan Privasi &mdash; Aplikasi STO</h1>
+<p class="tanggal">Berlaku sejak 7 September 2026 &middot; PT Mekar Armada Jaya</p>
+
+<p>
+  STO adalah aplikasi internal PT Mekar Armada Jaya untuk pelaksanaan
+  <em>stock take opname</em> di lingkungan pabrik. Aplikasi ini dipakai oleh
+  karyawan yang ditugaskan, bukan oleh masyarakat umum. Halaman ini
+  menjelaskan data apa yang diambil aplikasi, untuk apa, dan ke mana
+  perginya.
+</p>
+
+<h2>Data yang dikumpulkan</h2>
+
+<table>
+  <tr><th>Data</th><th>Untuk apa</th><th>Wajib?</th></tr>
+  <tr>
+    <td>Nomor Induk Karyawan (NIK)</td>
+    <td>Menandai siapa yang menyiapkan, menghitung, atau membatalkan tiap
+        tag &mdash; supaya selisih hasil hitung bisa ditelusuri.</td>
+    <td>Ya</td>
+  </tr>
+  <tr>
+    <td>Pengenal perangkat (ANDROID_ID) dan nama perangkat yang diisi
+        pemakainya</td>
+    <td>Satu NIK dipasangkan pada satu perangkat, supaya hasil hitung tidak
+        tertukar antar-perangkat.</td>
+    <td>Ya</td>
+  </tr>
+  <tr>
+    <td>Data pekerjaan: nomor tag, nomor part, area, jumlah barang, waktu
+        kejadian</td>
+    <td>Isi pekerjaan itu sendiri &mdash; inilah hasil stock take yang
+        dilaporkan.</td>
+    <td>Ya</td>
+  </tr>
+  <tr>
+    <td>Isi pesan pada fitur kotak pesan</td>
+    <td>Komunikasi antara operator lapangan dan admin selama pelaksanaan.</td>
+    <td>Hanya bila dipakai</td>
+  </tr>
+</table>
+
+<p>
+  Aplikasi <strong>tidak</strong> mengumpulkan nama pribadi, nomor telepon,
+  alamat surel, kontak, foto pribadi, data kesehatan, data keuangan, maupun
+  data biometrik. Tidak ada iklan, tidak ada pelacak pihak ketiga, dan tidak
+  ada analitik pihak ketiga di dalam aplikasi.
+</p>
+
+<h2>Izin perangkat dan alasannya</h2>
+
+<table>
+  <tr><th>Izin</th><th>Alasan</th></tr>
+  <tr>
+    <td>Kamera</td>
+    <td>Memindai kode QR pada tag yang sudah tercetak. Gambar dari kamera
+        diproses di perangkat saat itu juga, tidak disimpan dan tidak
+        dikirim ke mana pun.</td>
+  </tr>
+  <tr>
+    <td>Bluetooth (sambung &amp; pindai)</td>
+    <td>Menyambung ke printer label termal yang dipakai mencetak tag.</td>
+  </tr>
+  <tr>
+    <td>Lokasi perkiraan &amp; presisi</td>
+    <td>Diminta sistem Android sebagai syarat teknis untuk memindai
+        perangkat Bluetooth di Android 12 ke bawah.
+        <strong>Aplikasi tidak pernah membaca, menyimpan, atau mengirimkan
+        posisi Anda.</strong> Tidak ada satu pun titik koordinat yang
+        dikumpulkan aplikasi ini.</td>
+  </tr>
+</table>
+
+<h2>Ke mana data dikirim</h2>
+
+<p>
+  Seluruh data dikirim ke server milik PT Mekar Armada Jaya dan disimpan di
+  sana. Tidak ada data yang dibagikan, dijual, atau dipindahkan ke pihak
+  ketiga mana pun. Di dalam pabrik, aplikasi terhubung ke server jaringan
+  lokal; dari luar, sambungannya memakai HTTPS terenkripsi.
+</p>
+
+<div class="catatan">
+  Data yang tersimpan di perangkat hanya berupa antrean kiriman yang belum
+  sampai ke server (mis. saat jaringan terputus), setelan aplikasi, dan
+  identitas sesi. Semuanya terhapus ketika aplikasi dihapus dari perangkat.
+</div>
+
+<h2>Berapa lama disimpan</h2>
+
+<p>
+  Data hasil stock take disimpan sebagai catatan perusahaan sesuai kebutuhan
+  audit persediaan. Isi kotak pesan disimpan selama periode pelaksanaan
+  berjalan.
+</p>
+
+<h2>Hak Anda atas data</h2>
+
+<p>
+  Akun pada aplikasi ini dibuat dan dihapus oleh administrator perusahaan,
+  bukan oleh pemakai sendiri. Untuk meminta salinan, koreksi, atau
+  penghapusan data yang berkaitan dengan Anda, hubungi administrator sistem
+  STO di departemen Anda atau alamat di bawah. Permintaan penghapusan akun
+  akan diproses dengan catatan bahwa data hasil stock take yang sudah
+  dilaporkan dapat dipertahankan sebagai catatan audit perusahaan.
+</p>
+
+<h2>Anak-anak</h2>
+
+<p>
+  Aplikasi ini ditujukan untuk karyawan dan tidak diperuntukkan bagi anak di
+  bawah 13 tahun.
+</p>
+
+<h2>Perubahan kebijakan</h2>
+
+<p>
+  Bila kebijakan ini berubah, versi terbaru diterbitkan di halaman ini
+  beserta tanggal berlakunya.
+</p>
+
+<h2>Kontak</h2>
+
+<p>
+  PT Mekar Armada Jaya<br>
+  Jl. Mayjend Bambang Soegeng KM 1, Mertoyudan, Magelang, Jawa Tengah,
+  Indonesia<br>
+  Surel: <code>[ISI ALAMAT SUREL YANG DIPANTAU]</code>
+</p>
+
+</body>
+</html>

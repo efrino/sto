@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/debouncer.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/widgets/app_feedback.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../data/models/tag_ok.dart';
 import '../../state/session_provider.dart';
@@ -45,17 +48,53 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
   final _debouncer = Debouncer();
   SaringanTagOk _saringan = SaringanTagOk.semua;
 
+  /// Penyegaran berkala.
+  ///
+  /// Satu Tag OK dipindai bergantian oleh beberapa handheld: yang menyiapkan
+  /// belum tentu yang menghitung. Tanpa ini, daftar berhenti di keadaan saat
+  /// layar dibuka dan operator tidak tahu rekannya sudah menutup tag.
+  static const Duration _selangSegar = Duration(seconds: 12);
+  Timer? _segar;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _muat());
+    _segar = Timer.periodic(_selangSegar, (_) => _segarkanDiam());
   }
 
   @override
   void dispose() {
+    _segar?.cancel();
     _cari.dispose();
     _debouncer.dispose();
     super.dispose();
+  }
+
+  /// Provider disimpan sejak dependensi terpasang - timer bisa berdenyut saat
+  /// widget sudah dilepas dari pohon, dan `context.read` di saat itu melempar.
+  SessionProvider? _sesi;
+  TagOkProvider? _tagok;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sesi = context.read<SessionProvider>();
+    _tagok = context.read<TagOkProvider>();
+  }
+
+  Future<void> _segarkanDiam() async {
+    if (!mounted) return;
+    final user = _sesi?.user;
+    if (user == null) return;
+
+    await _tagok?.segarkanRiwayat(
+          user,
+          terbuka: _saringan.terbuka,
+          batal: _saringan.kodeBatal,
+          keyword: _cari.text.trim(),
+          hanyaMilikSaya: !user.isAdmin,
+        );
   }
 
   Future<void> _muat() async {
@@ -164,7 +203,10 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
   Widget _tile(TagOk tag) {
     final (warna, latar) = warnaKeadaan(tag);
 
-    return Container(
+    return InkWell(
+      onTap: () => _detail(tag),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -228,7 +270,208 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
           ),
         ],
       ),
+      ),
     );
+  }
+
+  // ------------------------------------------------------------ detail
+  /// Rincian satu Tag OK, beserta jalan untuk mengoreksi hasil hitungnya.
+  Future<void> _detail(TagOk tag) async {
+    final user = context.read<SessionProvider>().user;
+
+    // Aturannya sama dengan tag STO: yang mencatat angkanya yang boleh
+    // mengubahnya. Admin ikut boleh, karena dialah yang membereskan selisih
+    // ketika pencatatnya sudah pulang.
+    final miliknya = user != null &&
+        (user.isAdmin ||
+            tag.scannedBy.trim().toUpperCase() == user.nik.toUpperCase());
+    final bisaDiubah = tag.sudahDihitung && tag.bisaDiproses && miliknya;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      tag.idTagOk,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    tag.keadaan,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (tag.qtyScan != null)
+                _rinci('Qty hitung', '${tag.qtyScan} pcs', tebal: true),
+              if (tag.qtyKbn.trim().isNotEmpty)
+                _rinci('Qty kanban', '${tag.qtyKbn} pcs'),
+              if (tag.selisih != null && tag.selisih != 0)
+                _rinci('Selisih', '${tag.selisih! > 0 ? '+' : ''}'
+                    '${tag.selisih}'),
+              _rinci('Part number', tag.partNumber),
+              _rinci('Job number', tag.jobNumber),
+              _rinci('Area', tag.area),
+              if (tag.process.trim().isNotEmpty)
+                _rinci('Proses', tag.process),
+              if (tag.customer.trim().isNotEmpty)
+                _rinci('Customer', tag.customer),
+              if (tag.openedAt != null)
+                _rinci('Disiapkan',
+                    '${tag.openedBy} - ${Formatters.dateTime(tag.openedAt!)}'),
+              if (tag.scannedAt != null)
+                _rinci('Dihitung',
+                    '${tag.scannedBy} - ${Formatters.dateTime(tag.scannedAt!)}'),
+              if (tag.canceledAt != null)
+                _rinci(tag.dibatalkan ? 'Dibatalkan' : 'Diajukan batal',
+                    '${tag.namaPembatal} - '
+                    '${Formatters.dateTime(tag.canceledAt!)}'),
+              if (tag.cancelReason.trim().isNotEmpty)
+                _rinci('Alasan', tag.cancelReason),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: bisaDiubah
+                      ? () {
+                          Navigator.pop(sheet);
+                          _ubahQty(tag);
+                        }
+                      : null,
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: Text(_labelUbah(tag, miliknya)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Kenapa tombol koreksinya mati - supaya operator tidak menebak.
+  static String _labelUbah(TagOk tag, bool miliknya) {
+    if (!tag.bisaDiproses) return 'Tag sedang dalam pembatalan';
+    if (!tag.sudahDihitung) return 'Belum ada angka untuk dikoreksi';
+    if (!miliknya) {
+      return 'Hanya ${tag.scannedBy} yang boleh mengubah';
+    }
+    return 'Ubah qty';
+  }
+
+  Widget _rinci(String nama, String isi, {bool tebal = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 108,
+              child: Text(
+                nama,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                isi.trim().isEmpty ? '-' : isi,
+                style: TextStyle(
+                  fontSize: tebal ? 14.5 : 12.5,
+                  fontWeight: tebal ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// Koreksi angka Tag OK - dikirim lewat endpoint hitung yang sama, jadi
+  /// server tetap yang memutuskan boleh atau tidaknya.
+  Future<void> _ubahQty(TagOk tag) async {
+    final user = context.read<SessionProvider>().user;
+    if (user == null) return;
+
+    final kolom = TextEditingController(text: '${tag.qtyScan ?? 0}');
+    final angka = await showDialog<int>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Ubah qty ${tag.idTagOk}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tersimpan sekarang: ${tag.qtyScan} pcs '
+              '(dicatat ${tag.scannedBy}).',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: kolom,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Qty baru',
+                suffixText: 'pcs',
+              ),
+              onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v.trim())),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialog, int.tryParse(kolom.text.trim())),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+    kolom.dispose();
+
+    if (angka == null || !mounted) return;
+
+    final tagok = context.read<TagOkProvider>();
+    final berhasil = await tagok.hitung(user, tag.idTagOk, angka);
+    if (!mounted) return;
+
+    if (berhasil) {
+      AppFeedback.success(context, tagok.pesan ?? 'Qty diubah.');
+      await _muat();
+    } else {
+      AppFeedback.error(context, tagok.error ?? 'Qty gagal diubah.');
+    }
   }
 
   /// Jejak singkat siapa melakukan apa - itu yang dicari saat menelusuri
@@ -250,7 +493,7 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
     }
     if (tag.canceledAt != null) {
       baris.add('${tag.dibatalkan ? 'Dibatalkan' : 'Diajukan batal'} '
-          '${tag.canceledBy} - ${Formatters.dateTime(tag.canceledAt!)}'
+          '${tag.namaPembatal} - ${Formatters.dateTime(tag.canceledAt!)}'
           '${tag.cancelReason.isEmpty ? '' : '\n${tag.cancelReason}'}');
     }
 

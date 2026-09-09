@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/config/app_config.dart';
@@ -6,6 +8,7 @@ import '../data/remote/api_gateway.dart';
 import '../data/models/sto_tag.dart';
 import '../services/printer/label_builder.dart';
 import '../services/printer/label_document.dart';
+import '../services/printer/bluetooth_settings.dart';
 import '../services/printer/printer_service.dart';
 
 /// Mengelola koneksi ke printer internal MPOS 332 dan preferensi kertas.
@@ -84,10 +87,36 @@ class PrinterProvider extends ChangeNotifier {
     }
   }
 
+  StreamSubscription<PrinterState>? _langganan;
+
+  /// Mulai mendengarkan perubahan keadaan yang datang dari perangkat.
+  ///
+  /// Bluetooth yang dimatikan operator tidak melewati satu pun method di
+  /// provider ini. Tanpa langganan ini, kartu printer di beranda tetap
+  /// bertuliskan "Tersambung" sampai ada yang menekan Cetak - dan saat itu
+  /// tag sudah terlanjur dibuat.
+  void _dengarkanService() {
+    _langganan?.cancel();
+    _langganan = _service.aliranKeadaan?.listen((_) {
+      _sebabGagal = _service.state == PrinterState.disconnected
+          ? 'Bluetooth mati atau printer terputus. Ketuk untuk menyambung '
+              'lagi.'
+          : null;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _langganan?.cancel();
+    super.dispose();
+  }
+
   /// Dipakai halaman Setting saat berpindah antara printer nyata dan simulasi.
   void swapService(PrinterService service) {
     _service = service;
     _selected = service.currentDevice;
+    _dengarkanService();
     notifyListeners();
   }
 
@@ -107,6 +136,8 @@ class PrinterProvider extends ChangeNotifier {
     } catch (_) {
       // Bukan alasan menghentikan bootstrap.
     }
+
+    _dengarkanService();
 
     _paperSize = await _prefs.paperSize();
     _autoConnect = await _prefs.autoConnectPrinter();
@@ -168,14 +199,54 @@ class PrinterProvider extends ChangeNotifier {
   /// Mencoba lagi dari awal - dipakai saat operator mengetuk kartu printer.
   Future<void> cobaLagi() async {
     _sebabGagal = null;
+    _busy = true;
     notifyListeners();
     try {
       await _service.ensurePermissions();
+
+      // Bluetooth yang mati adalah sebab tersering di lapangan, dan operator
+      // tidak selalu menyadarinya. Dimintakan lebih dulu lewat dialog sistem
+      // supaya ia cukup menekan "Izinkan" tanpa keluar dari aplikasi.
+      if (!await _service.isAvailable()) {
+        final diminta = await BluetoothSettings.nyalakan();
+        if (diminta) {
+          // Dialognya muncul; radio butuh sesaat untuk benar-benar menyala.
+          await _tungguBluetoothHidup();
+        } else {
+          // Permintaannya tidak bisa dimunculkan - antar ke setelannya.
+          await BluetoothSettings.buka();
+        }
+      }
+
+      if (!await _service.isAvailable()) {
+        _sebabGagal = 'Bluetooth masih mati. Nyalakan dulu, lalu ketuk kartu '
+            'ini lagi.';
+        return;
+      }
+
       await ensureReady();
+      if (!isConnected) {
+        _sebabGagal = 'Printer belum menjawab. Pastikan printernya menyala, '
+            'lalu ketuk lagi.';
+      }
     } catch (e) {
       _sebabGagal = '$e';
+    } finally {
+      _busy = false;
+      notifyListeners();
     }
-    notifyListeners();
+  }
+
+  /// Menunggu radio benar-benar menyala setelah operator menekan "Izinkan".
+  ///
+  /// Dialognya berbalas seketika, radionya tidak: menyambung tepat sesudah
+  /// itu hampir selalu gagal, dan operator melihat "printer bermasalah"
+  /// padahal ia baru saja melakukan hal yang benar.
+  Future<void> _tungguBluetoothHidup() async {
+    for (var i = 0; i < 10; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (await _service.isAvailable()) return;
+    }
   }
 
   Future<bool> connect(PrinterDevice device, {bool silent = false}) async {
@@ -200,6 +271,11 @@ class PrinterProvider extends ChangeNotifier {
   /// kalau belum ada cari printer internal yang sudah ter-pairing dari pabrik.
   /// Dipanggil sebelum mencetak supaya operator tidak perlu buka menu Setting.
   Future<bool> ensureReady() async {
+    // Keadaan yang tersimpan hanya ingatan aplikasi, dan ingatan itu bisa
+    // basi: Bluetooth yang dimatikan tidak memberi tahu siapa pun. Ditanyakan
+    // ulang ke perangkat lebih dulu - kalau tidak, tag dibuat dan ditandai
+    // tercetak sementara kertasnya tidak pernah keluar.
+    await _service.periksaSambungan();
     if (isConnected) return true;
 
     if (_selected == null) {
@@ -208,7 +284,13 @@ class PrinterProvider extends ChangeNotifier {
     final device = _selected;
     if (device == null) return false;
 
-    return connect(device);
+    await connect(device);
+
+    // Yang dilaporkan keadaan SESUDAHNYA, bukan hasil connect() itu sendiri.
+    // Jalur printer yang gagal tanpa melempar - mis. radionya mati di tengah
+    // jalan - membuat connect() tetap "berhasil" sementara sambungannya tidak
+    // pernah terbentuk, dan pemanggilnya lanjut mencetak ke ruang hampa.
+    return isConnected;
   }
 
   Future<void> disconnect() async {

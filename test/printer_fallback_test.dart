@@ -23,6 +23,26 @@ class _PrinterPalsu implements PrinterService {
   PrinterState get state => _state;
 
   @override
+  Stream<PrinterState>? get aliranKeadaan => null;
+
+  /// Radio Bluetooth perangkat. Dimatikan lewat [matikanBluetooth] untuk
+  /// meniru operator yang menggeser saklarnya.
+  bool radioHidup = true;
+
+  int periksaDipanggil = 0;
+
+  void matikanBluetooth() => radioHidup = false;
+
+  @override
+  Future<PrinterState> periksaSambungan() async {
+    periksaDipanggil++;
+    // Radio yang mati memutus sambungan tanpa melewati method apa pun -
+    // ingatan `_state` tetap "connected" sampai ada yang bertanya.
+    if (!radioHidup) _state = PrinterState.disconnected;
+    return _state;
+  }
+
+  @override
   PrinterDevice? get currentDevice =>
       _state == PrinterState.connected ? _perangkat : null;
 
@@ -33,14 +53,14 @@ class _PrinterPalsu implements PrinterService {
   Future<void> ensurePermissions() async {}
 
   @override
-  Future<bool> isAvailable() async => true;
+  Future<bool> isAvailable() async => radioHidup;
 
   @override
   Future<List<PrinterDevice>> discoverDevices() async => [_perangkat];
 
   @override
   Future<void> connect(PrinterDevice device) async {
-    _state = PrinterState.connected;
+    _state = radioHidup ? PrinterState.connected : PrinterState.error;
   }
 
   @override
@@ -109,6 +129,50 @@ void main() {
     createdAt: DateTime(2026, 9, 2, 7, 45),
   );
 
+
+  group('Bluetooth yang dimatikan di tengah jalan', () {
+    // Kejadian nyata di lapangan: operator mematikan Bluetooth, layar tetap
+    // menulis "Tersambung", tag dibuat dan ditandai tercetak - dan kertasnya
+    // tidak pernah keluar. Nomor tag itu hilang percuma karena pembatalannya
+    // harus lewat pengajuan ke admin.
+    test('status tersambung yang basi tidak dipercaya begitu saja', () async {
+      final palsu = _PrinterPalsu(nama: 'printer');
+      final provider =
+          PrinterProvider(service: palsu, prefs: PrefsStore.instance);
+      await provider.bootstrap();
+
+      await provider.connect(
+        const PrinterDevice(name: 'printer', address: '00:11:22:33:44:55'),
+      );
+      expect(provider.isConnected, isTrue);
+
+      // Operator menggeser saklar Bluetooth. Tidak ada method provider yang
+      // terpanggil - ingatannya masih "tersambung".
+      palsu.matikanBluetooth();
+      expect(provider.isConnected, isTrue, reason: 'ingatan memang basi');
+
+      // ensureReady bertanya ulang ke perangkat sebelum mengizinkan mencetak.
+      final siap = await provider.ensureReady();
+
+      expect(palsu.periksaDipanggil, greaterThan(0));
+      expect(siap, isFalse);
+      expect(provider.isConnected, isFalse);
+    });
+
+    test('printer yang benar-benar tersambung tetap lolos', () async {
+      final palsu = _PrinterPalsu(nama: 'printer');
+      final provider =
+          PrinterProvider(service: palsu, prefs: PrefsStore.instance);
+      await provider.bootstrap();
+
+      await provider.connect(
+        const PrinterDevice(name: 'printer', address: '00:11:22:33:44:55'),
+      );
+
+      expect(await provider.ensureReady(), isTrue);
+      expect(provider.isConnected, isTrue);
+    });
+  });
 
   group('Jarak sobek kertas (dapat diatur operator)', () {
     test('bawaan mengikuti feedAfterTagDots sampai operator mengubahnya',

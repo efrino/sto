@@ -13,6 +13,9 @@ enum StoEventStatus {
           : StoEventStatus.open;
 }
 
+/// Letak sebuah periode STO terhadap hari ini.
+enum JadwalEvent { akanDatang, berjalan, terlewat }
+
 /// Periode pelaksanaan STO. Tag hanya boleh dibuat saat ada event berstatus
 /// BUKA, dan tiap tag menyimpan `event_id`-nya sebagai jejak periode.
 class StoEvent {
@@ -23,6 +26,8 @@ class StoEvent {
     required this.endDate,
     this.areas = const [],
     this.status = StoEventStatus.open,
+    this.bolehCetak = true,
+    this.totalTim = 2,
     this.createdBy = '-',
     required this.createdAt,
   });
@@ -40,10 +45,43 @@ class StoEvent {
   final List<String> areas;
 
   final StoEventStatus status;
+
+  /// Izin mencetak tag baru pada event ini (`allow_print` di server).
+  ///
+  /// Terpisah dari [status] karena keduanya memang keputusan yang berbeda:
+  /// menjelang akhir pelaksanaan, pencetakan tag dihentikan jauh sebelum
+  /// perhitungannya selesai. Event tetap BUKA supaya hasil hitung masih bisa
+  /// masuk, tapi tidak ada tag baru yang boleh keluar dari printer.
+  final bool bolehCetak;
+
+  /// Jumlah tim penghitung pada event ini - 1 atau 2 (`total_tim`).
+  final int totalTim;
+
   final String createdBy;
   final DateTime createdAt;
 
   bool get isOpen => status == StoEventStatus.open;
+
+  /// Boleh menyiapkan tag: event berjalan hari ini DAN pencetakan dibuka.
+  bool bolehSiapkanPada(DateTime kini) => isActiveOn(kini) && bolehCetak;
+
+  /// Alasan tag tidak bisa disiapkan; kosong berarti boleh.
+  ///
+  /// Sengaja menyebut sebabnya satu per satu: "tidak bisa mencetak" tanpa
+  /// keterangan membuat operator menyangka printernya rusak, lalu ia mencabut
+  /// dan menyambung ulang printer yang sebenarnya sehat.
+  String alasanTidakBolehSiapkan(DateTime kini) {
+    if (!isActiveOn(kini)) {
+      return isOpen
+          ? 'Event "$name" belum berjalan hari ini (${jadwalLabel(kini)}).'
+          : 'Event "$name" sudah ditutup admin.';
+    }
+    if (!bolehCetak) {
+      return 'Pencetakan tag pada event "$name" sedang ditutup admin. '
+          'Hasil hitung tetap bisa dikirim.';
+    }
+    return '';
+  }
 
   /// Aktif = statusnya BUKA dan tanggal hari ini masuk rentang periode.
   bool isActiveOn(DateTime date) {
@@ -53,6 +91,67 @@ class StoEvent {
     final to = DateTime(endDate.year, endDate.month, endDate.day);
     return !day.isBefore(from) && !day.isAfter(to);
   }
+
+  /// Letak periode ini terhadap hari yang sedang berjalan.
+  ///
+  /// Status BUKA saja tidak cukup memberi tahu apa pun: event yang dibuka
+  /// bulan lalu dan sudah lewat tetap tampil "BUKA", dan operator baru sadar
+  /// ada yang salah ketika tagnya ditolak. Keterangan ini memisahkan yang
+  /// benar-benar berjalan hari ini dari yang belum mulai atau sudah lewat.
+  JadwalEvent jadwalPada(DateTime kini) {
+    final hari = DateTime(kini.year, kini.month, kini.day);
+    final mulai = DateTime(startDate.year, startDate.month, startDate.day);
+
+    if (hari.isBefore(mulai)) return JadwalEvent.akanDatang;
+    if (tanpaTanggalSelesai) return JadwalEvent.berjalan;
+
+    final selesai = DateTime(endDate.year, endDate.month, endDate.day);
+    return hari.isAfter(selesai) ? JadwalEvent.terlewat : JadwalEvent.berjalan;
+  }
+
+  /// Selisih hari ke tanggal mulai (bila belum mulai) atau dari tanggal
+  /// selesai (bila sudah lewat). Selalu >= 0.
+  int selisihHari(DateTime kini) {
+    final hari = DateTime(kini.year, kini.month, kini.day);
+    switch (jadwalPada(kini)) {
+      case JadwalEvent.akanDatang:
+        return DateTime(startDate.year, startDate.month, startDate.day)
+            .difference(hari)
+            .inDays;
+      case JadwalEvent.terlewat:
+        return hari
+            .difference(DateTime(endDate.year, endDate.month, endDate.day))
+            .inDays;
+      case JadwalEvent.berjalan:
+        return 0;
+    }
+  }
+
+  /// Kalimat pendek untuk ditempel di kartu event.
+  String jadwalLabel([DateTime? saat]) {
+    final kini = saat ?? DateTime.now();
+    final jarak = selisihHari(kini);
+
+    switch (jadwalPada(kini)) {
+      case JadwalEvent.akanDatang:
+        return jarak == 1 ? 'Mulai besok' : 'Mulai $jarak hari lagi';
+      case JadwalEvent.terlewat:
+        return jarak == 1
+            ? 'Sudah lewat kemarin'
+            : 'Sudah lewat $jarak hari lalu';
+      case JadwalEvent.berjalan:
+        if (tanpaTanggalSelesai) return 'Berlangsung hari ini';
+        final sisa = DateTime(endDate.year, endDate.month, endDate.day)
+            .difference(DateTime(kini.year, kini.month, kini.day))
+            .inDays;
+        if (sisa == 0) return 'Hari terakhir';
+        if (sisa == 1) return 'Berlangsung, sisa 1 hari';
+        return 'Berlangsung, sisa $sisa hari';
+    }
+  }
+
+  /// true bila periodenya menaungi hari ini, apa pun status BUKA/TUTUP-nya.
+  bool berjalanPada(DateTime kini) => jadwalPada(kini) == JadwalEvent.berjalan;
 
   bool coversArea(String area) {
     if (areas.isEmpty) return true;
@@ -77,6 +176,8 @@ class StoEvent {
     DateTime? endDate,
     List<String>? areas,
     StoEventStatus? status,
+    bool? bolehCetak,
+    int? totalTim,
   }) {
     return StoEvent(
       id: id,
@@ -85,6 +186,8 @@ class StoEvent {
       endDate: endDate ?? this.endDate,
       areas: areas ?? this.areas,
       status: status ?? this.status,
+      bolehCetak: bolehCetak ?? this.bolehCetak,
+      totalTim: totalTim ?? this.totalTim,
       createdBy: createdBy,
       createdAt: createdAt,
     );
@@ -97,6 +200,8 @@ class StoEvent {
         'end_date': endDate.toIso8601String(),
         'areas': areas.join(','),
         'status': status.name,
+        'allow_print': bolehCetak ? 1 : 0,
+        'total_tim': totalTim,
         'created_by': createdBy,
         'created_at': createdAt.toIso8601String(),
       };
@@ -108,6 +213,12 @@ class StoEvent {
         endDate: DateTime.tryParse('${map['end_date']}') ?? DateTime.now(),
         areas: AppUser.parseAreas(map['areas']),
         status: StoEventStatus.fromName(map['status'] as String?),
+        // Baris cache lama belum punya kolom ini. Diam-diam menganggapnya
+        // "dilarang mencetak" akan mengunci handheld yang sedang offline,
+        // jadi yang tidak diketahui dianggap boleh - server tetap yang
+        // memutuskan begitu jaringannya kembali.
+        bolehCetak: '${map['allow_print'] ?? 1}' != '0',
+        totalTim: int.tryParse('${map['total_tim'] ?? 2}') ?? 2,
         createdBy: map['created_by'] as String? ?? '-',
         createdAt: DateTime.tryParse('${map['created_at']}') ?? DateTime.now(),
       );
@@ -119,6 +230,8 @@ class StoEvent {
         'end_date': endDate.toIso8601String(),
         'areas': areas,
         'status': status.name,
+        'allow_print': bolehCetak ? 1 : 0,
+        'total_tim': totalTim,
         'created_by': createdBy,
         'created_at': createdAt.toIso8601String(),
       };
@@ -138,6 +251,10 @@ class StoEvent {
       status: '${json['status']}' == '1'
           ? StoEventStatus.open
           : StoEventStatus.closed,
+      // Deployment lama belum mengirim kolom ini sama sekali; ketiadaannya
+      // dibaca sebagai "boleh", bukan "dilarang".
+      bolehCetak: '${json['allow_print'] ?? 1}' != '0',
+      totalTim: int.tryParse('${json['total_tim'] ?? 2}') ?? 2,
       createdBy: '${json['created_by'] ?? 'SERVER'}',
       createdAt: DateTime.tryParse('${json['created_at']}') ?? DateTime.now(),
     );
@@ -150,6 +267,8 @@ class StoEvent {
         endDate: DateTime.tryParse('${json['end_date']}') ?? DateTime.now(),
         areas: AppUser.parseAreas(json['areas'] ?? json['area']),
         status: StoEventStatus.fromName(json['status']?.toString()),
+        bolehCetak: '${json['allow_print'] ?? 1}' != '0',
+        totalTim: int.tryParse('${json['total_tim'] ?? 2}') ?? 2,
         createdBy: (json['created_by'] ?? '-').toString(),
         createdAt: DateTime.tryParse('${json['created_at']}') ?? DateTime.now(),
       );

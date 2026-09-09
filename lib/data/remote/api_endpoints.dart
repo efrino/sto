@@ -34,6 +34,10 @@ class ApiEndpoints {
   static const String deviceUpdate = '/sto/device-update';
   static const String deviceDelete = '/sto/device-delete';
 
+  /// Perangkat mengaku sendiri: memindahkan pemasangan NIK ke perangkat yang
+  /// sedang dipakai, tanpa perlu admin login di sana.
+  static const String deviceClaim = '/sto/device-claim';
+
   // ------------------------------------------------------------------ event
   static const String eventList = '/sto/event-list';
   static const String eventDetail = '/sto/event-detail';

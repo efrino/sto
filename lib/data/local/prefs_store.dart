@@ -26,6 +26,7 @@ class PrefsStore {
   static const _kLocalSeqPrefix = 'local_seq_';
   static const _kLastSync = 'last_sync_at';
   static const _kLocalDeviceId = 'local_device_id';
+  static const _kNamaPerangkat = 'nama_perangkat';
   static const _kPaperFeedDots = 'paper_feed_dots';
   static const _kTagGapDots = 'tag_gap_dots';
   static const _kFeedMigrasi = 'paper_feed_migrasi_v2';
@@ -98,8 +99,31 @@ class PrefsStore {
         return benar;
       }
     }
+
+    // Deployment HTTPS pindah dari /sto ke /sto-v2 pada 8 September 2026.
+    // Handheld yang sudah dipakai menyimpan alamat lamanya sendiri, jadi
+    // mengganti alamat bawaan saja tidak memindahkan satu pun dari mereka -
+    // mereka akan tetap bicara ke kode lama yang tidak mengenal izin cetak
+    // maupun klaim perangkat, tanpa gejala apa pun selain fitur yang diam.
+    const lama = 'https://mspin.newarmada.biz/sto/public/api';
+    if (bersih == lama) {
+      const baru = 'https://mspin.newarmada.biz/sto-v2/public/api';
+      await setBaseUrl(baru);
+      return baru;
+    }
+
     return bersih;
   }
+
+  /// Nama perangkat yang diisi pemakainya saat aplikasi pertama dibuka.
+  ///
+  /// Disimpan di perangkat, bukan ditanyakan ke server: namanya justru
+  /// dibutuhkan SEBELUM perangkat ini dikenal server sama sekali.
+  Future<String> namaPerangkat() async =>
+      (await _p).getString(_kNamaPerangkat) ?? '';
+
+  Future<void> setNamaPerangkat(String value) async =>
+      (await _p).setString(_kNamaPerangkat, value.trim());
 
   Future<void> setBaseUrl(String value) async =>
       (await _p).setString(_kBaseUrl, value.trim());

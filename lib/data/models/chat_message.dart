@@ -1,3 +1,36 @@
+/// Keadaan pengiriman satu pesan yang ditulis sendiri.
+///
+/// Dipakai menggambar centang di gelembung pesan. Tanpa penanda ini pengirim
+/// tidak punya cara membedakan pesan yang belum sampai dari yang sudah
+/// dibaca - dan yang ia lakukan adalah mengirim ulang, lalu ditolak
+/// penjagaan spam server.
+enum KirimPesan {
+  /// Masih dalam perjalanan ke server (belum punya id).
+  mengirim,
+
+  /// Tersimpan di server, belum dibuka lawan bicara.
+  terkirim,
+
+  /// Lawan bicara sudah membuka utasnya sampai pesan ini.
+  dibaca,
+
+  /// Ditolak server atau jaringan putus - isinya dikembalikan ke kotak tulis.
+  gagal,
+}
+
+/// Isi satu percakapan beserta batas bacanya.
+///
+/// Batas baca dikirim di tingkat utas, bukan per pesan, karena memang begitu
+/// bentuknya di server: satu baris `chat_reads` per orang per utas.
+class IsiUtas {
+  const IsiUtas({this.pesan = const [], this.dibacaSampai = 0});
+
+  final List<ChatMessage> pesan;
+
+  /// Id pesan terakhir yang sudah dibaca LAWAN BICARA; 0 bila belum ada.
+  final int dibacaSampai;
+}
+
 /// Satu pesan pada kotak pesan operator - admin.
 class ChatMessage {
   const ChatMessage({
@@ -8,6 +41,7 @@ class ChatMessage {
     required this.createdAt,
     this.broadcast = false,
     this.dariAdmin = false,
+    this.kirim = KirimPesan.terkirim,
   });
 
   final int id;
@@ -26,6 +60,58 @@ class ChatMessage {
   /// NIK: peran bisa berubah, dan operator perlu tahu apakah yang menjawab
   /// memang orang yang berwenang - bukan sekadar NIK asing.
   final bool dariAdmin;
+
+  /// Keadaan pengiriman - hanya berarti untuk pesan yang ditulis sendiri.
+  /// Pesan yang datang dari server selalu sudah terkirim.
+  final KirimPesan kirim;
+
+  /// Nama pengirim sebagaimana boleh ditampilkan di layar.
+  ///
+  /// NIK admin sengaja TIDAK pernah ditulis. Login STO tidak memakai kata
+  /// sandi - NIK saja sudah cukup untuk masuk - jadi NIK admin yang terbaca
+  /// operator sama artinya dengan kunci yang tergeletak: ia bisa masuk
+  /// sebagai admin lalu memberi izin apa pun kepada dirinya sendiri.
+  ///
+  /// Bagi operator, yang penting memang bukan admin yang mana: jawabannya
+  /// datang dari orang yang berwenang, dan itu saja yang perlu ia tahu.
+  String get namaTampil => dariAdmin ? 'ADMIN' : fromNik;
+
+  /// Pesan yang belum punya id server - ditampilkan lebih dulu supaya
+  /// mengetik terasa seketika, lalu diganti balasan server.
+  bool get menunggu => kirim == KirimPesan.mengirim;
+
+  /// Centang apa yang pantas digambar untuk pesan ini, dilihat dari mata
+  /// [nik] dengan batas baca lawan bicara [dibacaSampai].
+  ///
+  /// Aturannya ditaruh di model, bukan di layar: yang menentukan bukan
+  /// tampilannya melainkan arti - dan artinya sama di mana pun pesan itu
+  /// ditampilkan.
+  KirimPesan keadaanKirim({required String nik, required int dibacaSampai}) {
+    // Centang adalah kabar untuk pengirim. Pesan orang lain tidak punya.
+    if (fromNik != nik) return KirimPesan.terkirim;
+
+    if (kirim == KirimPesan.mengirim || kirim == KirimPesan.gagal) {
+      return kirim;
+    }
+
+    // Pengumuman dibaca banyak orang, dan batas baca yang ada hanya milik
+    // pembaca yang paling jauh. Menggambarnya sebagai "sudah dibaca" akan
+    // terbaca sebagai "sudah dibaca semua orang" - itu tidak benar.
+    if (broadcast) return KirimPesan.terkirim;
+
+    return dibacaSampai >= id ? KirimPesan.dibaca : KirimPesan.terkirim;
+  }
+
+  ChatMessage salin({KirimPesan? kirim}) => ChatMessage(
+        id: id,
+        thread: thread,
+        fromNik: fromNik,
+        body: body,
+        createdAt: createdAt,
+        broadcast: broadcast,
+        dariAdmin: dariAdmin,
+        kirim: kirim ?? this.kirim,
+      );
 
   factory ChatMessage.fromServer(Map<String, dynamic> json) => ChatMessage(
         id: int.tryParse('${json['id'] ?? 0}') ?? 0,

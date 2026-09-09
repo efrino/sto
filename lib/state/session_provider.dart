@@ -62,6 +62,9 @@ class SessionProvider extends ChangeNotifier {
         pesan.contains('perangkat ini');
   }
 
+  /// Terisi sekali setelah login yang memindahkan pemasangan perangkat.
+  String? catatanPindahPerangkat;
+
   Future<bool> login(String nik, {String? password}) async {
     _status = SessionStatus.loading;
     _error = null;
@@ -69,6 +72,9 @@ class SessionProvider extends ChangeNotifier {
     try {
       _user = await _repository.login(nik, password: password);
       _status = SessionStatus.authenticated;
+      // Bukan galat: kabar bahwa pemasangan perangkat baru saja berpindah
+      // ke perangkat ini. Layar login yang menampilkannya.
+      catatanPindahPerangkat = _repository.catatanPindahPerangkat;
       notifyListeners();
       return true;
     } catch (e) {

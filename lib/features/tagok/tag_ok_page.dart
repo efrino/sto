@@ -354,7 +354,7 @@ class _TagOkPageState extends State<TagOkPage> {
               if (tag.canceledAt != null)
                 _baris(
                   tag.dibatalkan ? 'Dibatalkan' : 'Diajukan batal',
-                  '${tag.canceledBy} - ${Formatters.dateTime(tag.canceledAt!)}'
+                  '${tag.namaPembatal} - ${Formatters.dateTime(tag.canceledAt!)}'
                   '${tag.cancelReason.isEmpty ? '' : ' - ${tag.cancelReason}'}',
                 ),
               if (tag.scannedAt != null)
@@ -378,9 +378,9 @@ class _TagOkPageState extends State<TagOkPage> {
     if (widget.mode != TagOkMode.batal && !tag.bisaDiproses) {
       return _catatan(
         tag.dibatalkan
-            ? 'Tag OK ini sudah dibatalkan oleh ${tag.canceledBy}'
+            ? 'Tag OK ini sudah dibatalkan oleh ${tag.namaPembatal}'
                 '${tag.cancelReason.isEmpty ? '' : ' - ${tag.cancelReason}'}.'
-            : 'Tag OK ini sedang diajukan batal oleh ${tag.canceledBy}, '
+            : 'Tag OK ini sedang diajukan batal oleh ${tag.namaPembatal}, '
                 'menunggu keputusan admin.',
         AppColors.danger,
         AppColors.dangerSoft,
@@ -402,7 +402,7 @@ class _TagOkPageState extends State<TagOkPage> {
 
     if (tag.dibatalkan) {
       return _catatan(
-        'Tag OK ini sudah dibatalkan oleh ${tag.canceledBy}'
+        'Tag OK ini sudah dibatalkan oleh ${tag.namaPembatal}'
         '${tag.cancelReason.isEmpty ? '' : ' - ${tag.cancelReason}'}.',
         AppColors.danger,
         AppColors.dangerSoft,
@@ -412,7 +412,7 @@ class _TagOkPageState extends State<TagOkPage> {
     if (tag.menungguKeputusan) {
       if (!admin) {
         return _catatan(
-          'Pengajuan batal dari ${tag.canceledBy} sedang menunggu keputusan '
+          'Pengajuan batal dari ${tag.namaPembatal} sedang menunggu keputusan '
           'admin${tag.cancelReason.isEmpty ? '' : ' - ${tag.cancelReason}'}.',
           AppColors.warning,
           AppColors.warningSoft,
@@ -424,7 +424,7 @@ class _TagOkPageState extends State<TagOkPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _catatan(
-            'Diajukan ${tag.canceledBy}'
+            'Diajukan ${tag.namaPembatal}'
             '${tag.cancelReason.isEmpty ? '' : ' - ${tag.cancelReason}'}',
             AppColors.warning,
             AppColors.warningSoft,

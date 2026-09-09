@@ -150,7 +150,8 @@ class TagOkProvider extends ChangeNotifier {
       // lama dipakai supaya operator tetap bisa bekerja - bukan menampilkan
       // "Unknown method" yang tidak bisa ia perbaiki sendiri.
       if (e.statusCode == 405 ||
-          e.message.toLowerCase().contains('unknown method')) {
+          e.message.toLowerCase().contains('unknown method') ||
+          e.message.toLowerCase().contains('belum tersedia')) {
         final lama = await siapkan(user, idTagOk);
         if (lama) return true;
         return false;
@@ -310,5 +311,49 @@ class TagOkProvider extends ChangeNotifier {
       _memuat = false;
       notifyListeners();
     }
+  }
+
+  /// Memuat ulang daftar tanpa memasang tanda memuat, dan tanpa membangun
+  /// ulang layar bila isinya tidak berubah.
+  ///
+  /// Dipakai penyegaran berkala di layar Riwayat: [muatRiwayat] biasa akan
+  /// mengganti daftar dengan spinner tiap beberapa detik.
+  Future<void> segarkanRiwayat(
+    AppUser user, {
+    bool? terbuka,
+    String? keyword,
+    int? batal,
+    bool hanyaMilikSaya = false,
+  }) async {
+    if (_memuat) return;
+    try {
+      final baru = await _api.fetchTagOkList(
+        nik: user.nik,
+        terbuka: terbuka,
+        keyword: keyword,
+        batal: batal,
+        milik: hanyaMilikSaya ? user.nik : null,
+      );
+      if (_samaDengan(baru, _riwayat)) return;
+      _riwayat = baru;
+      _error = null;
+      notifyListeners();
+    } on ApiException {
+      // Diam saja - daftar yang lama tetap terbaca, dan pesan gagal yang
+      // muncul-hilang sendiri tiap beberapa detik hanya membingungkan.
+    }
+  }
+
+  static bool _samaDengan(List<TagOk> a, List<TagOk> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].idTagOk != b[i].idTagOk ||
+          a[i].qtyScan != b[i].qtyScan ||
+          a[i].batal != b[i].batal ||
+          a[i].terbuka != b[i].terbuka) {
+        return false;
+      }
+    }
+    return true;
   }
 }

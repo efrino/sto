@@ -15,7 +15,10 @@ class AppConfig {
   /// Keduanya HARUS berakhir di '/api': jalur endpoint ditulis sebagai
   /// '/sto/part-list', jadi tanpa '/api' server menjawab 404 untuk semuanya.
   static const Map<String, String> serverPilihan = {
-    'Internet (HTTPS)': 'https://mspin.newarmada.biz/sto/public/api',
+    // Sejak 8 September 2026 alamatnya pindah ke /sto-v2. Deployment lama
+    // (/sto) masih hidup tapi menjalankan kode yang lebih tua - tanpa izin
+    // cetak pada event, dan tanpa klaim perangkat.
+    'Internet (HTTPS)': 'https://mspin.newarmada.biz/sto-v2/public/api',
     'Jaringan pabrik (HTTP)': 'http://192.168.10.67/majsf_rest_api/api',
   };
 

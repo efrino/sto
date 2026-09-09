@@ -1,7 +1,50 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sto_prep/data/models/sto_device.dart';
+import 'package:sto_prep/data/remote/api_client.dart';
+import 'package:sto_prep/data/repositories/auth_repository.dart';
 
 void main() {
+  group('Perangkat mengaku sendiri', () {
+    // Operator pindah ke HP pribadi saat handheld habis baterai. Login
+    // ditolak karena NIK-nya masih menempel di handheld; perangkat ini
+    // mengaku, lalu login diulang.
+    test('penolakan perangkat memicu klaim', () {
+      final e = ApiException(
+        'Anda tidak terdaftar di perangkat ini',
+        statusCode: 403,
+      );
+      expect(bolehKlaimPerangkat(e, 'HP BUDI'), isTrue);
+    });
+
+    test('perangkat tanpa nama tidak boleh mengaku', () {
+      // Tanpa nama, perangkat ini akan tercatat sebagai baris tanpa
+      // identitas di layar admin - tidak ada yang bisa mengenalinya.
+      final e = ApiException('x', statusCode: 403);
+      expect(bolehKlaimPerangkat(e, ''), isFalse);
+      expect(bolehKlaimPerangkat(e, '   '), isFalse);
+    });
+
+    test('NIK yang tidak terdaftar tidak dicoba ulang', () {
+      // 404 datang dari NIK yang belum didaftarkan admin. Mengulanginya
+      // tidak akan pernah berhasil, dan pesan aslinya justru hilang.
+      final e = ApiException('NIK tidak terdaftar', statusCode: 404);
+      expect(bolehKlaimPerangkat(e, 'HP BUDI'), isFalse);
+    });
+
+    test('gangguan server tidak memindahkan perangkat', () {
+      // Perangkat tidak boleh berpindah gara-gara server tersendat -
+      // perpindahan itu mencabut NIK dari perangkat yang mungkin sedang
+      // dipakai bekerja.
+      for (final kode in [500, 502, 408, null]) {
+        expect(
+          bolehKlaimPerangkat(ApiException('x', statusCode: kode), 'HP BUDI'),
+          isFalse,
+          reason: 'kode $kode',
+        );
+      }
+    });
+  });
+
   group('Pemasangan NIK ke perangkat', () {
     final device = StoDevice(
       deviceId: '20a92433c2f589cd',

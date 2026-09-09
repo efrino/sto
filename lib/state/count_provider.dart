@@ -113,6 +113,65 @@ class CountProvider extends ChangeNotifier {
     }
   }
 
+  /// Mengoreksi angka sebuah baris riwayat.
+  ///
+  /// Mengembalikan null bila ditolak - alasannya ada di [message].
+  Future<StoCount?> ubahQty({
+    required StoCount lama,
+    required AppUser user,
+    required int qty,
+  }) async {
+    try {
+      final saved = await _repo.ubahQty(lama: lama, user: user, qty: qty);
+      _message = 'Qty ${saved.tagNo} diubah ${lama.qty} -> ${saved.qty} '
+          '${saved.unit}.';
+      await _dorongKeServer();
+      await load();
+      return saved;
+    } catch (e) {
+      _message = e.toString();
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Memuat ulang tanpa memasang tanda memuat.
+  ///
+  /// Dipakai penyegaran berkala di layar Riwayat: menyalakan [loading] akan
+  /// membuat daftar berkedip jadi spinner tiap beberapa detik, dan baris
+  /// yang sedang dibaca operator hilang di tengah jalan.
+  Future<void> refreshDiam() async {
+    if (_loading) return;
+    try {
+      final riwayat = await _repo.history(keyword: _keyword, user: _user);
+      _peringatan = _repo.peringatanRiwayat;
+
+      // Daftar yang isinya sama tidak perlu memicu pembangunan ulang -
+      // itulah yang membuat layar terasa berat saat penyegaran berjalan.
+      if (_samaDengan(riwayat, _history)) return;
+
+      _history = riwayat;
+      _pendingSync = await _syncRepo.pendingCount();
+      notifyListeners();
+    } catch (_) {
+      // Penyegaran diam: kegagalan jaringan tidak perlu mengganggu layar,
+      // daftar yang lama tetap ditampilkan.
+    }
+  }
+
+  static bool _samaDengan(List<StoCount> a, List<StoCount> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].tagNo != b[i].tagNo ||
+          a[i].team != b[i].team ||
+          a[i].qty != b[i].qty ||
+          a[i].syncStatus != b[i].syncStatus) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Mengirim antrean sekarang juga; kegagalan jaringan didiamkan karena
   /// datanya sudah aman di antrean.
   Future<void> _dorongKeServer() async {

@@ -10,6 +10,7 @@ import '../data/models/sto_tag.dart';
 import '../data/repositories/part_repository.dart';
 import '../data/repositories/sync_repository.dart';
 import '../data/repositories/tag_repository.dart';
+import '../data/remote/sto_api.dart';
 import '../services/printer/printer_service.dart';
 import 'printer_provider.dart';
 
@@ -283,6 +284,13 @@ class PrepareProvider extends ChangeNotifier {
 
   /// Membuat N tag unik (increment id) untuk part terpilih.
   /// [eventId] wajib: tag hanya boleh dibuat saat ada event STO yang aktif.
+  /// Terisi bila percobaan terakhir ditolak karena pencetakan sedang ditutup
+  /// admin (`allow_print = 0`); null berarti tidak.
+  String? get cetakDitutup => _cetakDitutup;
+  String? _cetakDitutup;
+
+  void bersihkanCetakDitutup() => _cetakDitutup = null;
+
   Future<bool> generate(AppUser user, {required String eventId}) async {
     // Penjaga ketukan ganda. Tanpa ini satu ketukan tambahan membuat SATU
     // BATCH BARU di server: `print-tag` sudah terlanjur dipanggil per lembar,
@@ -299,6 +307,7 @@ class PrepareProvider extends ChangeNotifier {
     }
     _generating = true;
     _error = null;
+    _cetakDitutup = null;
     notifyListeners();
     try {
       final result = await _tagRepo.generate(
@@ -315,6 +324,14 @@ class PrepareProvider extends ChangeNotifier {
       _offlineSequence = !result.fromServerSequence;
       _autoPrinted = false;
       return true;
+    } on ApiCetakDitutupException catch (e) {
+      // Bukan kegagalan: admin memang sedang menutup pencetakan. Ditandai
+      // terpisah supaya layar menampilkannya sebagai keterangan, dan supaya
+      // keadaan event di layar bisa disegarkan - saklarnya baru saja berubah
+      // di server tanpa sepengetahuan perangkat ini.
+      _cetakDitutup = e.message;
+      _error = e.message;
+      return false;
     } catch (e) {
       _error = e.toString();
       return false;

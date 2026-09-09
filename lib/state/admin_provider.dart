@@ -46,6 +46,34 @@ class AdminProvider extends ChangeNotifier {
 
   bool get hasActiveEvent => _activeEvent != null;
 
+  /// Event yang paling perlu diketahui hari ini - untuk kartu di beranda.
+  ///
+  /// [activeEvent] hanya berisi yang benar-benar berjalan, jadi memakainya
+  /// sendirian membuat beranda berkata "belum ada event" pada dua keadaan
+  /// yang sangat berbeda: memang belum ada apa-apa, atau eventnya ada tapi
+  /// baru mulai lusa. Yang kedua justru perlu diberitahukan.
+  ///
+  /// Urutan yang dipilih: yang sedang berjalan, lalu yang paling dekat akan
+  /// mulai, terakhir yang paling baru saja lewat.
+  StoEvent? get eventDisorot {
+    if (_activeEvent != null) return _activeEvent;
+    if (_events.isEmpty) return null;
+
+    final kini = DateTime.now();
+
+    final akanDatang = _events
+        .where((e) => e.isOpen && e.jadwalPada(kini) == JadwalEvent.akanDatang)
+        .toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    if (akanDatang.isNotEmpty) return akanDatang.first;
+
+    final lewat = _events
+        .where((e) => e.jadwalPada(kini) == JadwalEvent.terlewat)
+        .toList()
+      ..sort((a, b) => b.endDate.compareTo(a.endDate));
+    return lewat.isEmpty ? null : lewat.first;
+  }
+
   Future<void> load({String seedCreatedBy = 'SYSTEM', AppUser? admin}) async {
     _loading = true;
     _admin = admin ?? _admin;

@@ -77,6 +77,20 @@ class TagOk {
   final DateTime? canceledAt;
 
   bool get dibatalkan => batal == 1;
+
+  /// Nama pembatal sebagaimana boleh ditampilkan.
+  ///
+  /// `canceled_by` ditimpa oleh siapa pun yang terakhir mengubah keadaannya:
+  /// saat diajukan ia berisi si pengaju, tapi saat DISETUJUI ia berisi admin
+  /// yang memutuskan - dan hanya admin yang boleh memutuskan (server menolak
+  /// 403 untuk yang lain). Jadi pada tag yang sudah dibatalkan, isinya pasti
+  /// NIK admin.
+  ///
+  /// NIK itu tidak boleh sampai ke layar operator: login STO tanpa kata
+  /// sandi, jadi NIK admin yang terbaca sama artinya dengan kunci yang
+  /// tergeletak.
+  String get namaPembatal =>
+      dibatalkan ? 'ADMIN' : (canceledBy.trim().isEmpty ? '-' : canceledBy);
   bool get menungguKeputusan => batal == 2;
 
   bool get sudahDihitung => scannedAt != null;

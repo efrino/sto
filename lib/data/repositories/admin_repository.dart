@@ -277,6 +277,8 @@ class AdminRepository {
             start: event.startDate,
             end: event.endDate,
             berjalan: event.isOpen,
+            bolehCetak: event.bolehCetak,
+            totalTim: event.totalTim,
           );
           tersimpan = StoEvent.fromServer(hasil);
         } else {
@@ -287,6 +289,8 @@ class AdminRepository {
             start: event.startDate,
             end: event.endDate,
             berjalan: event.isOpen,
+            bolehCetak: event.bolehCetak,
+            totalTim: event.totalTim,
           );
         }
 

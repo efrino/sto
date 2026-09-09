@@ -21,8 +21,16 @@ class ChatProvider extends ChangeNotifier {
 
   final ApiGateway _api;
 
-  /// Jeda antar penyegaran saat layar pesan terbuka.
-  static const Duration jedaSegarkan = Duration(seconds: 8);
+  /// Jeda antar penyegaran saat layar percakapan terbuka.
+  ///
+  /// Dipersingkat dari 8 detik: yang dikirim hanya pesan setelah id terakhir,
+  /// jadi denyut yang sepi hampir tidak berbiaya - sementara balasan yang
+  /// datang 8 detik terlambat terasa seperti pesan yang tidak sampai.
+  static const Duration jedaSegarkan = Duration(seconds: 4);
+
+  /// Jeda penyegaran DAFTAR percakapan. Lebih jarang: satu permintaannya
+  /// menyapu semua utas, dan yang berubah di sana cuma baris terakhir.
+  static const Duration jedaDaftar = Duration(seconds: 10);
 
   List<ChatThread> _threads = const [];
   List<ChatMessage> _pesan = const [];
@@ -32,6 +40,14 @@ class ChatProvider extends ChangeNotifier {
   String? _error;
 
   Timer? _denyut;
+  Timer? _denyutDaftar;
+
+  /// Id pesan terakhir yang sudah dibaca lawan bicara pada utas yang terbuka.
+  int _dibacaSampai = 0;
+
+  /// Nomor sementara untuk pesan yang belum dijawab server. Negatif supaya
+  /// tidak mungkin bertabrakan dengan id sungguhan.
+  int _nomorSementara = -1;
 
   List<ChatThread> get threads => _threads;
   List<ChatMessage> get pesan => _pesan;
@@ -51,8 +67,16 @@ class ChatProvider extends ChangeNotifier {
   @override
   void dispose() {
     _denyut?.cancel();
+    _denyutDaftar?.cancel();
     super.dispose();
   }
+
+  /// Keadaan pengiriman satu pesan, dilihat dari mata [nik].
+  ///
+  /// Pesan orang lain tidak punya centang - centang adalah kabar untuk
+  /// pengirim, bukan penerima.
+  KirimPesan keadaan(ChatMessage m, String nik) =>
+      m.keadaanKirim(nik: nik, dibacaSampai: _dibacaSampai);
 
   /// Daftar percakapan. Dipanggil juga dari beranda hanya untuk badge-nya.
   Future<void> muatThreads(AppUser user) async {
@@ -77,7 +101,9 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _pesan = await _api.fetchChatMessages(nik: user.nik, thread: thread);
+      final isi = await _api.fetchChatMessages(nik: user.nik, thread: thread);
+      _pesan = isi.pesan;
+      _dibacaSampai = isi.dibacaSampai;
       _error = null;
       await _tandaiDibaca(user);
     } on ApiException catch (e) {
@@ -97,6 +123,46 @@ class ChatProvider extends ChangeNotifier {
     _denyut = null;
     _utasAktif = null;
     _pesan = const [];
+    _dibacaSampai = 0;
+  }
+
+  /// Menyegarkan DAFTAR percakapan berkala - dipakai layar daftar pesan.
+  ///
+  /// Tanpa ini, baris terakhir dan jumlah belum dibaca hanya berubah kalau
+  /// daftarnya ditarik turun, dan pesan baru terasa tidak pernah datang.
+  void mulaiDenyutDaftar(AppUser user) {
+    _denyutDaftar?.cancel();
+    _denyutDaftar = Timer.periodic(jedaDaftar, (_) => _segarkanDaftar(user));
+  }
+
+  void hentikanDenyutDaftar() {
+    _denyutDaftar?.cancel();
+    _denyutDaftar = null;
+  }
+
+  Future<void> _segarkanDaftar(AppUser user) async {
+    if (_memuat) return;
+    try {
+      final baru = await _api.fetchChatThreads(user.nik);
+      if (_daftarSama(baru, _threads)) return;
+      _threads = baru;
+      _error = null;
+      notifyListeners();
+    } on ApiException {
+      // Didiamkan - daftar lama tetap terbaca.
+    }
+  }
+
+  static bool _daftarSama(List<ChatThread> a, List<ChatThread> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].thread != b[i].thread ||
+          a[i].lastId != b[i].lastId ||
+          a[i].belumDibaca != b[i].belumDibaca) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void mulaiDenyut(AppUser user) {
@@ -111,14 +177,30 @@ class ChatProvider extends ChangeNotifier {
     if (thread == null) return;
 
     try {
-      final baru = await _api.fetchChatMessages(
+      // Pesan yang belum punya id server tidak boleh dipakai sebagai batas -
+      // nomornya negatif, dan server akan mengirim ulang seluruh utas.
+      final terakhir = _pesan.where((m) => m.id > 0).fold<int>(
+            0,
+            (batas, m) => m.id > batas ? m.id : batas,
+          );
+
+      final isi = await _api.fetchChatMessages(
         nik: user.nik,
         thread: thread,
-        afterId: _pesan.isEmpty ? 0 : _pesan.last.id,
+        afterId: terakhir,
       );
-      if (baru.isEmpty) return;
 
-      _pesan = [..._pesan, ...baru];
+      final batasBerubah = isi.dibacaSampai != _dibacaSampai;
+      _dibacaSampai = isi.dibacaSampai;
+
+      // Batas baca yang bergerak juga kabar: centang satu berubah jadi dua
+      // walau tidak ada pesan baru sama sekali.
+      if (isi.pesan.isEmpty) {
+        if (batasBerubah) notifyListeners();
+        return;
+      }
+
+      _pesan = [..._pesan, ...isi.pesan];
       await _tandaiDibaca(user);
       notifyListeners();
     } on ApiException {
@@ -132,6 +214,20 @@ class ChatProvider extends ChangeNotifier {
     final isi = body.trim();
     if (thread == null || isi.isEmpty) return;
 
+    // Pesannya ditampilkan lebih dulu dengan tanda jam - di jaringan pabrik
+    // satu permintaan bisa makan beberapa detik, dan layar yang diam selama
+    // itu membuat orang menekan kirim berkali-kali.
+    final sementara = ChatMessage(
+      id: _nomorSementara--,
+      thread: thread,
+      fromNik: user.nik,
+      body: isi,
+      createdAt: DateTime.now(),
+      broadcast: thread == ChatThread.broadcastKey,
+      kirim: KirimPesan.mengirim,
+    );
+
+    _pesan = [..._pesan, sementara];
     _mengirim = true;
     _error = null;
     notifyListeners();
@@ -142,10 +238,23 @@ class ChatProvider extends ChangeNotifier {
         thread: thread,
         body: isi,
       );
-      _pesan = [..._pesan, pesan];
+      // Yang sementara diganti balasan server - bukan ditambahkan, supaya
+      // pesannya tidak tampil dua kali.
+      _pesan = [
+        for (final m in _pesan)
+          if (m.id != sementara.id) m,
+        pesan,
+      ];
     } on ApiException catch (e) {
       // Penolakan penjagaan spam sudah berupa kalimat siap tampil dari server.
       _error = '$e';
+      // Gelembungnya ditarik kembali: isinya dikembalikan ke kotak tulis oleh
+      // layar, jadi meninggalkannya di daftar hanya membuat pesan yang tidak
+      // pernah terkirim terlihat seolah ada.
+      _pesan = [
+        for (final m in _pesan)
+          if (m.id != sementara.id) m,
+      ];
     } finally {
       _mengirim = false;
       notifyListeners();

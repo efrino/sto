@@ -20,6 +20,12 @@ class MockPrinterService implements PrinterService {
   PrinterState get state => _state;
 
   @override
+  Stream<PrinterState>? get aliranKeadaan => null;
+
+  @override
+  Future<PrinterState> periksaSambungan() async => _state;
+
+  @override
   PrinterDevice? get currentDevice => _device;
 
   @override

@@ -12,6 +12,7 @@ import '../../state/admin_provider.dart';
 import '../../state/prepare_provider.dart';
 import '../../state/session_provider.dart';
 import '../../state/settings_provider.dart';
+import '../home/widgets/teks_berjalan.dart';
 
 /// Menentukan berapa TAG (nomor unik) yang akan dicetak untuk part terpilih.
 /// Penting: jumlah di sini bukan jumlah copy - tiap lembar punya nomor sendiri.
@@ -119,6 +120,19 @@ class _PreparePageState extends State<PreparePage> {
     if (!mounted) return;
 
     if (!ok) {
+      // Pencetakan yang ditutup admin bukan kegagalan - disampaikan sebagai
+      // keterangan, dan keadaan event langsung ditarik ulang supaya pita di
+      // atas layar serta tombolnya ikut menyesuaikan tanpa operator harus
+      // keluar-masuk menu.
+      final ditutup = provider.cetakDitutup;
+      if (ditutup != null) {
+        provider.bersihkanCetakDitutup();
+        await admin.refreshActiveEvent(pengakses: user);
+        if (!mounted) return;
+        AppFeedback.info(context, ditutup);
+        return;
+      }
+
       AppFeedback.error(context, provider.error ?? 'Gagal membuat tag.');
       return;
     }
@@ -173,15 +187,23 @@ class _PreparePageState extends State<PreparePage> {
         .toList()
       ..sort();
 
-    final event = context.watch<AdminProvider>().activeEvent;
+    final admin = context.watch<AdminProvider>();
+    final activeEvent = admin.activeEvent;
+    final eventDisorot = admin.eventDisorot;
+
+    // Izin cetak dipegang event, terpisah dari status buka/tutupnya: menjelang
+    // akhir pelaksanaan, admin menghentikan pencetakan tag baru sementara
+    // hasil hitung masih terus masuk.
+    final bolehCetak = activeEvent != null && activeEvent.bolehCetak;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Persiapan Tag STO')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         children: [
-          _eventBanner(event),
+          _eventBanner(eventDisorot),
           SectionCard(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             title: 'Part terpilih',
             icon: Icons.inventory_2_outlined,
             trailing: TextButton(
@@ -208,7 +230,7 @@ class _PreparePageState extends State<PreparePage> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _detailRow('Job Number', part.jobNumber),
                 _detailRow('Customer / Model', '${part.customer} / ${part.model}'),
                 _detailRow('Area', part.area),
@@ -219,10 +241,10 @@ class _PreparePageState extends State<PreparePage> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           SectionCard(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             title: 'Jumlah tag yang dicetak',
-            subtitle: 'Setiap tag mendapat nomor unik (bukan salinan)',
             icon: Icons.numbers,
             child: Column(
               children: [
@@ -244,7 +266,7 @@ class _PreparePageState extends State<PreparePage> {
                             LengthLimitingTextInputFormatter(3),
                           ],
                           style: const TextStyle(
-                            fontSize: 30,
+                            fontSize: 24,
                             fontWeight: FontWeight.w800,
                             color: AppColors.navy,
                           ),
@@ -260,7 +282,7 @@ class _PreparePageState extends State<PreparePage> {
                 ),
                 // Baris saran ikut hilang bila tidak ada angka yang tersisa -
                 // batas satu batch bisa membuat semua saran tersaring habis.
-                if (quickQty.isNotEmpty) const SizedBox(height: 12),
+                if (quickQty.isNotEmpty) const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   children: quickQty
@@ -283,54 +305,26 @@ class _PreparePageState extends State<PreparePage> {
                       )
                       .toList(),
                 ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Maksimal ${AppConfig.maxTagPerBatch} tag per sesi.',
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ),
+                // Batas ${AppConfig.maxTagPerBatch} tag per sesi tidak lagi
+                // ditulis di sini: angkanya tetap dijaga PrepareProvider yang
+                // menjepit nilainya, jadi operator tidak bisa melewatinya -
+                // sebaris kalimat yang hanya benar sekali seumur pemakaian
+                // tidak sebanding dengan tinggi yang dimakannya.
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.warningSoft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.info_outline, size: 18, color: AppColors.warning),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Nomor tag diambil dari server dan hanya bisa dicetak satu '
-                    'kali. Bila salah part, gunakan tombol Batalkan di halaman '
-                    'preview atau riwayat - jangan mencetak ulang.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.45,
-                      color: Color(0xFF7A5312),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Kotak keterangan panjang di sini sudah dibuang. Isinya -
+          // nomor tag hanya bisa dicetak sekali, pembatalan lewat
+          // preview/riwayat - tetap muncul di halaman preview, tepat
+          // sebelum tagnya benar-benar keluar. Di layar ini ia hanya
+          // memakan tinggi dan mendorong tombol cetak ke bawah lipatan.
         ],
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: ElevatedButton.icon(
-            onPressed: provider.generating || _menyiapkan || event == null
+            onPressed: provider.generating || _menyiapkan || !bolehCetak
                 ? null
                 : _generate,
             icon: provider.generating || _menyiapkan
@@ -346,7 +340,14 @@ class _PreparePageState extends State<PreparePage> {
             label: Text(
               provider.generating || _menyiapkan
                   ? 'Membuat nomor tag...'
-                  : 'BUAT & CETAK ${provider.qty} TAG',
+                  : bolehCetak
+                      ? 'BUAT & CETAK ${provider.qty} TAG'
+                      // Tombol mati tanpa keterangan selalu terbaca sebagai
+                      // kerusakan. Sebabnya ditulis di tombolnya sendiri,
+                      // bukan disembunyikan di pita atas layar.
+                      : activeEvent == null
+                          ? 'BELUM ADA EVENT BERJALAN'
+                          : 'PENCETAKAN TAG SEDANG DITUTUP',
             ),
           ),
         ),
@@ -354,35 +355,72 @@ class _PreparePageState extends State<PreparePage> {
     );
   }
 
-  /// Status event STO yang sedang berjalan - penentu boleh/tidaknya
-  /// membuat tag hari ini.
+  /// Boleh cetak atau tidak - satu pertanyaan yang dijawab pita ini.
+  ///
+  /// Di beranda pita event menyebut nama, periode, dan jadwalnya. Di layar
+  /// ini semua itu tidak menolong: operator sudah berdiri di depan rak dengan
+  /// part di tangan, dan yang perlu ia tahu cuma apakah tombol cetaknya akan
+  /// bekerja. Nama event-nya tetap disebut di ekor kalimat sebagai penunjuk
+  /// kalau ternyata tidak boleh - itu yang ditanyakan admin saat ia melapor.
   Widget _eventBanner(StoEvent? event) {
-    final aktif = event != null;
+    final (warna, latar, ikon, teks) = switch (event) {
+      null => (
+          AppColors.danger,
+          AppColors.dangerSoft,
+          Icons.block,
+          'BELUM BOLEH CETAK - belum ada event STO yang berjalan. Minta admin '
+              'membukanya lewat Setting > Event.',
+        ),
+      final StoEvent e => switch (e.jadwalPada(DateTime.now())) {
+          JadwalEvent.berjalan when !e.bolehCetak => (
+              AppColors.warning,
+              AppColors.warningSoft,
+              Icons.print_disabled,
+              'BELUM BOLEH CETAK - pencetakan tag ditutup admin. Hasil hitung '
+                  'tetap bisa dikirim.  (event ${e.name})',
+            ),
+          JadwalEvent.berjalan => (
+              AppColors.success,
+              AppColors.successSoft,
+              Icons.print,
+              'BOLEH CETAK  -  ${e.name}  -  ${e.areaLabel}',
+            ),
+          JadwalEvent.akanDatang => (
+              AppColors.info,
+              AppColors.navySoft,
+              Icons.schedule,
+              'BELUM BOLEH CETAK - event ${e.name} ${e.jadwalLabel().toLowerCase()} '
+                  '(${e.periodLabel}).',
+            ),
+          JadwalEvent.terlewat => (
+              AppColors.danger,
+              AppColors.dangerSoft,
+              Icons.history_toggle_off,
+              'BELUM BOLEH CETAK - event ${e.name} ${e.jadwalLabel().toLowerCase()} '
+                  '(${e.periodLabel}).',
+            ),
+        },
+    };
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      height: 34,
       margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: aktif ? AppColors.successSoft : AppColors.dangerSoft,
-        borderRadius: BorderRadius.circular(12),
+        color: latar,
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(
-            aktif ? Icons.event_available : Icons.event_busy,
-            size: 18,
-            color: aktif ? AppColors.success : AppColors.danger,
-          ),
-          const SizedBox(width: 10),
+          Icon(ikon, size: 15, color: warna),
+          const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              aktif
-                  ? 'Event: ${event.name}  (${event.periodLabel})'
-                  : 'Belum ada event STO aktif - tag tidak bisa dibuat. '
-                      'Minta admin membukanya di menu Setting.',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                color: aktif ? const Color(0xFF0E5C39) : AppColors.danger,
+            child: TeksBerjalan(
+              teks: teks,
+              gaya: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: warna,
               ),
             ),
           ),
@@ -396,20 +434,23 @@ class _PreparePageState extends State<PreparePage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        width: 52,
-        height: 52,
+        // 44 masih di atas ukuran sasaran sentuh yang dianjurkan (48 dp
+        // termasuk jarak antarnya), jadi tetap nyaman ditekan bersarung
+        // tangan sambil menghemat tinggi.
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           color: AppColors.navySoft,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: AppColors.navy, size: 26),
+        child: Icon(icon, color: AppColors.navy, size: 22),
       ),
     );
   }
 
   Widget _detailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

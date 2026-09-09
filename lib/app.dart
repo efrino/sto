@@ -27,6 +27,7 @@ import 'state/device_provider.dart';
 import 'state/prepare_provider.dart';
 import 'state/chat_provider.dart';
 import 'state/print_history_provider.dart';
+import 'features/device/nama_perangkat_page.dart';
 import 'state/printer_provider.dart';
 import 'state/tag_ok_provider.dart';
 import 'state/session_provider.dart';
@@ -36,6 +37,7 @@ class AppRoutes {
   AppRoutes._();
 
   static const splash = '/';
+  static const namaPerangkat = '/nama-perangkat';
   static const login = '/login';
   static const home = '/home';
   static const search = '/search';
@@ -125,6 +127,7 @@ class StoPrepApp extends StatelessWidget {
         initialRoute: AppRoutes.splash,
         routes: {
           AppRoutes.splash: (_) => const SplashPage(),
+          AppRoutes.namaPerangkat: (_) => const NamaPerangkatPage(),
           AppRoutes.login: (_) => const LoginPage(),
           AppRoutes.home: (_) => const HomePage(),
           AppRoutes.search: (_) => const PartSearchPage(),

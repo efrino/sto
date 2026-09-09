@@ -74,6 +74,42 @@ class PrintHistoryProvider extends ChangeNotifier {
     }
   }
 
+  /// Memuat ulang tanpa memasang tanda memuat dan tanpa membangun ulang
+  /// layar bila isinya tidak berubah.
+  ///
+  /// Dipakai penyegaran berkala di layar Riwayat. [load] biasa akan membuat
+  /// daftar berkedip jadi spinner tiap beberapa detik.
+  Future<void> refreshDiam(AppUser user, {int limit = 100}) async {
+    if (_loading) return;
+    try {
+      final baru = await _api.fetchPrintHistory(
+        nik: user.nik,
+        keyword: _keyword,
+        limit: limit,
+      );
+      _error = null;
+      if (_samaDengan(baru.entries, _history.entries)) return;
+      _history = baru;
+      notifyListeners();
+    } on ApiException {
+      // Diam saja: daftar yang lama tetap terbaca, dan pesan gagal yang
+      // muncul-hilang sendiri tiap beberapa detik hanya membingungkan.
+    }
+  }
+
+  static bool _samaDengan(List<PrintEntry> a, List<PrintEntry> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].tagNo != b[i].tagNo ||
+          a[i].state != b[i].state ||
+          a[i].canceled != b[i].canceled ||
+          a[i].cancelDiajukan != b[i].cancelDiajukan) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Mencetak ulang tag yang tertinggal (draft/gagal), lalu melaporkan
   /// hasilnya ke server.
   ///

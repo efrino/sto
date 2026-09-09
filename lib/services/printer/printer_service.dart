@@ -60,6 +60,23 @@ class PrinterException implements Exception {
 abstract class PrinterService {
   PrinterState get state;
 
+  /// Perubahan keadaan yang datang dari perangkat, bukan dari aplikasi.
+  ///
+  /// Bluetooth yang dimatikan operator (atau mati sendiri) tidak melewati
+  /// satu pun method di kelas ini, jadi tanpa aliran ini status di layar
+  /// tetap tertulis "Tersambung" sampai ada yang mencoba mencetak - dan tag
+  /// terlanjur ditandai tercetak padahal kertasnya tidak pernah keluar.
+  ///
+  /// Jalur yang tidak punya kabar semacam itu mengembalikan null.
+  Stream<PrinterState>? get aliranKeadaan => null;
+
+  /// Menanyakan ulang keadaan sambungan ke perangkat, lalu menyesuaikan
+  /// [state] bila ternyata berbeda.
+  ///
+  /// Dipanggil sebelum mencetak: [state] adalah ingatan aplikasi, dan ingatan
+  /// itu bisa basi. Mengembalikan keadaan yang sudah dikoreksi.
+  Future<PrinterState> periksaSambungan() async => state;
+
   /// Meminta izin runtime yang dibutuhkan jalur printer ini.
   ///
   /// Dipanggil sejak splash, saat layar masih diam: kalau dialog izin baru

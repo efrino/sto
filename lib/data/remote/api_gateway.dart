@@ -98,11 +98,23 @@ class ApiGateway implements StoApi {
       _api.reportPrintFailed(tag, message);
 
   @override
+  Future<bool> claimDevice({
+    required String nik,
+    required String androidId,
+    required String deviceName,
+  }) =>
+      _api.claimDevice(
+        nik: nik,
+        androidId: androidId,
+        deviceName: deviceName,
+      );
+
+  @override
   Future<List<ChatThread>> fetchChatThreads(String nik) =>
       _api.fetchChatThreads(nik);
 
   @override
-  Future<List<ChatMessage>> fetchChatMessages({
+  Future<IsiUtas> fetchChatMessages({
     required String nik,
     required String thread,
     int afterId = 0,
@@ -395,6 +407,8 @@ class ApiGateway implements StoApi {
     required DateTime start,
     required DateTime end,
     bool berjalan = true,
+    bool bolehCetak = true,
+    int totalTim = 2,
   }) =>
       _api.createEvent(
         adminNik: adminNik,
@@ -402,6 +416,8 @@ class ApiGateway implements StoApi {
         start: start,
         end: end,
         berjalan: berjalan,
+        bolehCetak: bolehCetak,
+        totalTim: totalTim,
       );
 
   @override
@@ -412,6 +428,8 @@ class ApiGateway implements StoApi {
     DateTime? start,
     DateTime? end,
     bool? berjalan,
+    bool? bolehCetak,
+    int? totalTim,
   }) =>
       _api.updateEvent(
         adminNik: adminNik,
@@ -420,6 +438,8 @@ class ApiGateway implements StoApi {
         start: start,
         end: end,
         berjalan: berjalan,
+        bolehCetak: bolehCetak,
+        totalTim: totalTim,
       );
 
   @override
