@@ -211,12 +211,23 @@ class TagOkProvider extends ChangeNotifier {
   }
 
   /// Mencatat hasil hitung fisik lalu menutup tag.
-  Future<bool> hitung(AppUser user, String idTagOk, int qty) async {
+  Future<bool> hitung(
+    AppUser user,
+    String idTagOk,
+    int qty, {
+    bool confirm = true,
+  }) async {
     _sibuk = true;
     _error = null;
     notifyListeners();
     try {
-      _tag = await _api.scanTagOk(user.nik, idTagOk.trim(), qty);
+      _tag = await _api.scanTagOk(
+        user.nik,
+        idTagOk.trim(),
+        qty,
+        tim: user.tim,
+        confirm: confirm,
+      );
       _pesan = 'Tag OK $idTagOk tercatat $qty pcs.';
       return true;
     } on ApiException catch (e) {

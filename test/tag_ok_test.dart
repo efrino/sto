@@ -187,4 +187,28 @@ void main() {
       expect(ScanCode.extractTagOk(null), isNull);
     });
   });
+
+  group('Kondisi hitung Tag OK', () {
+    test('tag sudah disiapkan siap dihitung', () {
+      final t = TagOk.fromServer(baris(scanOpen: 1, openedBy: 'A.10525'));
+      expect(t.terbuka, isTrue);
+      expect(t.sudahDihitung, isFalse);
+      expect(t.openedBy, 'A.10525');
+    });
+
+    test('tag sudah dihitung membawa NIK pencatat untuk pemeriksaan koreksi', () {
+      final t = TagOk.fromServer(
+        baris(
+          scanOpen: 0,
+          openedBy: 'A.10525',
+          qtyScan: 50,
+          scannedBy: 'A.10525',
+          scannedAt: '2026-09-10 10:00:00',
+        ),
+      );
+      expect(t.sudahDihitung, isTrue);
+      expect(t.scannedBy, 'A.10525');
+      expect(t.qtyScan, 50);
+    });
+  });
 }

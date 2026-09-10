@@ -4,7 +4,6 @@ import '../models/print_batch.dart';
 import '../models/pengajuan_batal.dart';
 import '../models/print_entry.dart';
 import '../models/sto_count.dart';
-import '../../core/config/app_config.dart';
 import '../../core/utils/formatters.dart';
 import '../models/chat_message.dart';
 import '../models/sto_tag.dart';
@@ -239,7 +238,13 @@ abstract class StoApi {
   Future<TagOk> openTagOk(String nik, String idTagOk, {TagOk? keterangan});
 
   /// Mencatat hasil hitung fisik lalu menutup Tag OK.
-  Future<TagOk> scanTagOk(String nik, String idTagOk, int qty);
+  Future<TagOk> scanTagOk(
+    String nik,
+    String idTagOk,
+    int qty, {
+    String? tim,
+    bool confirm = true,
+  });
 
   /// Daftar Tag OK; [terbuka] null berarti semua keadaan.
   Future<List<TagOk>> fetchTagOkList({
@@ -1286,11 +1291,19 @@ class HttpStoApi implements StoApi {
   }
 
   @override
-  Future<TagOk> scanTagOk(String nik, String idTagOk, int qty) async {
+  Future<TagOk> scanTagOk(
+    String nik,
+    String idTagOk,
+    int qty, {
+    String? tim,
+    bool confirm = true,
+  }) async {
     final body = await _client.post(ApiEndpoints.tagOkScan, {
       'nik': nik,
       'id_tag_ok': idTagOk,
       'qty': qty,
+      if (tim != null && tim.isNotEmpty) 'tim': AppUser.parseTeam(tim),
+      'confirm': confirm,
     });
     return _tagOkDari(body);
   }

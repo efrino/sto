@@ -85,6 +85,9 @@ class AppUser {
   final bool active;
   final String? token;
 
+  /// Alias tim (A / B) mengikuti penamaan pada model backend STO.
+  String get tim => team;
+
   bool get isAdmin => role == UserRole.admin;
 
   /// Admin selalu bebas; operator dibatasi bila daftar areanya diisi.

@@ -62,16 +62,12 @@ class _SplashPageState extends State<SplashPage> {
     // Namun bila ANDROID_ID perangkat ini sudah terdaftar di server
     // (mis. habis uninstall lalu install ulang), nama perangkat langsung
     // dipulihkan dari server tanpa perlu ditanyakan lagi ke operator.
-    var namaPerangkat = await context.read<AppDependencies>()
-        .prefs
-        .namaPerangkat();
+    final deps = context.read<AppDependencies>();
+    var namaPerangkat = await deps.prefs.namaPerangkat();
     if (namaPerangkat.trim().isEmpty) {
-      final pulih = await context
-          .read<AppDependencies>()
-          .deviceRepository
-          .pulihkanNamaDariServer();
+      final pulih = await deps.deviceRepository.pulihkanNamaDariServer();
       if (pulih != null && pulih.isNotEmpty) {
-        await context.read<AppDependencies>().prefs.setNamaPerangkat(pulih);
+        await deps.prefs.setNamaPerangkat(pulih);
         namaPerangkat = pulih;
       }
     }

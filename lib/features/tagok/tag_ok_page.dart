@@ -97,9 +97,14 @@ class _TagOkPageState extends State<TagOkPage> {
         return;
       }
 
-      // Qty kanban jadi angka awal - penghitung tinggal mengubahnya bila
-      // isinya ternyata berbeda, dan itu justru selisih yang dicari saat STO.
-      _qty.text = '${tag.qtyScan ?? tag.kanban ?? ''}';
+      final isSaya = tag.scannedBy.isNotEmpty &&
+          tag.scannedBy.trim().toUpperCase() == user.nik.trim().toUpperCase();
+
+      if (tag.sudahDihitung && isSaya) {
+        _qty.text = '${tag.qtyScan ?? tag.kanban ?? ''}';
+      } else {
+        _qty.text = '${tag.kanban ?? (tag.qtyScan != null ? '${tag.qtyScan}' : '')}';
+      }
 
       // Area diisi dari tagnya bila dikenali; kalau tidak, petugas memilih
       // sendiri - tombol Simpan mati sampai itu ditentukan.
@@ -224,7 +229,7 @@ class _TagOkPageState extends State<TagOkPage> {
     }
 
     final tagok = context.read<TagOkProvider>();
-    final ok = await tagok.hitung(user, tag.idTagOk, qty);
+    final ok = await tagok.hitung(user, tag.idTagOk, qty, confirm: true);
     if (!mounted) return;
 
     if (ok) {
@@ -563,6 +568,16 @@ class _TagOkPageState extends State<TagOkPage> {
       );
     }
 
+    if (tag.terbuka) {
+      return _catatan(
+        'Tag ini sudah disiapkan oleh ${tag.openedBy.isEmpty ? '-' : tag.openedBy}'
+        '${tag.openedAt == null ? '' : ' pada ${Formatters.dateTime(tag.openedAt!)}'}. '
+        'Tag sudah siap dihitung di menu Scan Tag OK.',
+        AppColors.info,
+        AppColors.navySoft,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -596,20 +611,53 @@ class _TagOkPageState extends State<TagOkPage> {
   }
 
   Widget _aksiHitung(TagOk tag, TagOkProvider tagok) {
-    if (tag.sudahDihitung) {
-      return _catatan(
-        'Tag ini sudah dihitung ${tag.qtyScan} pcs oleh ${tag.scannedBy}. '
-        'Hitungan ganda tidak diterima server.',
-        AppColors.success,
-        AppColors.successSoft,
-      );
-    }
-    if (!tag.terbuka) {
+    if (!tag.terbuka && !tag.sudahDihitung) {
       return _catatan(
         'Tag ini belum disiapkan. Minta petugas membukanya lewat menu '
         'Siapkan Tag OK lebih dulu.',
         AppColors.warning,
         AppColors.warningSoft,
+      );
+    }
+
+    if (tag.sudahDihitung) {
+      final pencatat = tag.scannedBy.isEmpty ? '-' : tag.scannedBy;
+      final waktu = tag.scannedAt == null
+          ? ''
+          : ' pada ${Formatters.dateTime(tag.scannedAt!)}';
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _catatan(
+            'Tag ini sudah dihitung ${tag.qtyScan} pcs oleh $pencatat$waktu. '
+            'Pembaruan / koreksi qty belum didukung pada server.',
+            AppColors.info,
+            AppColors.navySoft,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Qty hasil hitung fisik',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            enabled: false,
+            controller: TextEditingController(text: '${tag.qtyScan ?? ''}'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            decoration: InputDecoration(
+              hintText: tag.qtyKbn.isEmpty ? '0' : tag.qtyKbn,
+              suffixText: 'pcs',
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: null,
+            icon: const Icon(Icons.check_circle_outline),
+            label: const Text('Sudah dihitung (tidak dapat diubah)'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+          ),
+        ],
       );
     }
 

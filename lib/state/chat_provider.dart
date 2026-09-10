@@ -23,14 +23,14 @@ class ChatProvider extends ChangeNotifier {
 
   /// Jeda antar penyegaran saat layar percakapan terbuka.
   ///
-  /// Dipersingkat dari 8 detik: yang dikirim hanya pesan setelah id terakhir,
-  /// jadi denyut yang sepi hampir tidak berbiaya - sementara balasan yang
-  /// datang 8 detik terlambat terasa seperti pesan yang tidak sampai.
-  static const Duration jedaSegarkan = Duration(seconds: 4);
+  /// Disetel 2 detik agar percakapan real-time untuk semua role (operator & admin).
+  static const Duration jedaSegarkan = Duration(seconds: 2);
 
-  /// Jeda penyegaran DAFTAR percakapan. Lebih jarang: satu permintaannya
-  /// menyapu semua utas, dan yang berubah di sana cuma baris terakhir.
-  static const Duration jedaDaftar = Duration(seconds: 10);
+  /// Jeda penyegaran DAFTAR percakapan dan badge pesan di beranda.
+  ///
+  /// Disetel 2 detik agar bubble notifikasi pesan langsung muncul dan
+  /// terbarui secara real-time tanpa jeda.
+  static const Duration jedaDaftar = Duration(seconds: 2);
 
   List<ChatThread> _threads = const [];
   List<ChatMessage> _pesan = const [];
@@ -62,6 +62,23 @@ class ChatProvider extends ChangeNotifier {
 
   void bersihkanPesan() {
     _error = null;
+  }
+
+  /// Menghentikan semua denyut dan membersihkan data saat logout.
+  void reset() {
+    _denyut?.cancel();
+    _denyut = null;
+    _denyutDaftar?.cancel();
+    _denyutDaftar = null;
+    _threads = const [];
+    _pesan = const [];
+    _utasAktif = null;
+    _memuat = false;
+    _mengirim = false;
+    _error = null;
+    _dibacaSampai = 0;
+    _nomorSementara = -1;
+    notifyListeners();
   }
 
   @override

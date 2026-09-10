@@ -53,22 +53,36 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  ChatProvider? _chat;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chat = context.read<ChatProvider>();
+  }
+
+  @override
+  void dispose() {
+    _chat?.hentikanDenyutDaftar();
+    super.dispose();
+  }
+
   Future<void> _refresh() async {
     // Identitas disegarkan lebih dulu: perubahan izin oleh admin harus
     // langsung terasa di menu, tanpa menunggu login berikutnya.
     await context.read<SessionProvider>().refresh();
-    if (!mounted) return;
+    if (!mounted || context.read<SessionProvider>().user == null) return;
 
     await context.read<CountProvider>().load(
       user: context.read<SessionProvider>().user,
     );
-    if (!mounted) return;
+    if (!mounted || context.read<SessionProvider>().user == null) return;
 
     // Event berjalan ditarik dari server di sini, bukan menunggu operator
     // membuka menu Siapkan. Splash berjalan SEBELUM login, jadi saat itu
@@ -77,7 +91,7 @@ class _HomePageState extends State<HomePage> {
     await context.read<AdminProvider>().refreshActiveEvent(
           pengakses: context.read<SessionProvider>().user,
         );
-    if (!mounted) return;
+    if (!mounted || context.read<SessionProvider>().user == null) return;
 
     // Angka cetak diambil dari server supaya sama dengan yang dilihat admin,
     // termasuk tag yang dicetak dari perangkat lain.
@@ -92,9 +106,12 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       await context.read<PrintHistoryProvider>().load(user, limit: 200);
       if (!mounted) return;
-      // Badge pesan ikut disegarkan di sini - tanpa notifikasi sistem, beranda
-      // adalah tempat pertama orang tahu ada pesan baru.
-      await context.read<ChatProvider>().muatThreads(user);
+      // Badge pesan ikut disegarkan di sini - dan denyut berkala dimulai
+      // agar bubble notifikasi pesan di beranda selalu terbarui secara realtime.
+      final chat = context.read<ChatProvider>();
+      await chat.muatThreads(user);
+      if (!mounted) return;
+      chat.mulaiDenyutDaftar(user);
     }
   }
 
@@ -116,6 +133,7 @@ class _HomePageState extends State<HomePage> {
       destructive: true,
     );
     if (!ok || !mounted) return;
+    context.read<ChatProvider>().reset();
     await context.read<SessionProvider>().logout();
     if (!mounted) return;
     context.read<PrepareProvider>().resetAll();

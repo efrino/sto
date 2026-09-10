@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'core/config/app_config.dart';
 import 'core/di/dependencies.dart';
+import 'core/navigation/app_navigator.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/home_page.dart';
@@ -121,6 +122,7 @@ class StoPrepApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
+        navigatorKey: AppNavigator.key,
         title: AppConfig.appName,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
