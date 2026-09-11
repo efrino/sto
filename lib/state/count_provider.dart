@@ -187,9 +187,18 @@ class CountProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final result = await _syncRepo.flush();
-      _message = result.hasError
-          ? 'Terkirim ${result.sent}, gagal ${result.failed}.'
-          : 'Sinkronisasi selesai: ${result.sent} data terkirim.';
+      // Penolakan server disebut apa adanya - itu keputusan yang perlu
+      // diketahui operator (mis. angka milik rekan setim), bukan sekadar
+      // "gagal" yang menyuruhnya mencoba lagi tanpa hasil.
+      if (result.rejected > 0 && result.rejectionMessage != null) {
+        _message = '${result.rejected} kiriman ditolak server: '
+            '${result.rejectionMessage}';
+      } else if (result.hasError) {
+        _message = 'Terkirim ${result.sent}, gagal ${result.failed} - akan '
+            'dicoba lagi otomatis.';
+      } else {
+        _message = 'Sinkronisasi selesai: ${result.sent} data terkirim.';
+      }
       await load();
       return result;
     } finally {

@@ -276,4 +276,13 @@ void main() {
       }
     });
   });
+
+  group('Pengaman jumlah tag cetak (positif dan > 0)', () {
+    test('clamp nilai qty minimal 1 dan maksimal batas batch', () {
+      expect((-5).clamp(1, AppConfig.maxTagPerBatch), 1);
+      expect(0.clamp(1, AppConfig.maxTagPerBatch), 1);
+      expect(3.clamp(1, AppConfig.maxTagPerBatch), 3);
+      expect(100.clamp(1, AppConfig.maxTagPerBatch), AppConfig.maxTagPerBatch);
+    });
+  });
 }

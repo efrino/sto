@@ -28,14 +28,28 @@ class PrepareProvider extends ChangeNotifier {
   final TagRepository _tagRepo;
   final SyncRepository _syncRepo;
 
-  /// Area yang boleh dilihat user (izin dari admin). Kosong = tanpa batas.
+  /// Area yang boleh dilihat user (izin dari admin).
+  ///
+  /// Kosong berarti tanpa batas HANYA untuk admin. Untuk operator, kosong
+  /// ditandai lewat [tanpaAksesArea] dan pencarian tidak dijalankan sama
+  /// sekali - kalau tidak, permintaan ke server tanpa saringan area akan
+  /// mengembalikan seluruh master, dan itulah lubang yang sebelumnya ada.
   List<String> _allowedAreas = const [];
   List<String> get allowedAreas => _allowedAreas;
+
+  /// Operator yang belum diberi area oleh admin - tidak boleh mencari apa pun.
+  bool _tanpaAksesArea = false;
+  bool get tanpaAksesArea => _tanpaAksesArea;
 
   /// Dipanggil saat halaman pencarian dibuka: membatasi daftar part sesuai
   /// izin area yang diberikan admin ke user tersebut.
   void applyPermissions(AppUser user) {
-    _allowedAreas = user.hasAreaLimit ? user.areas : const [];
+    _tanpaAksesArea = user.tanpaAksesArea;
+    _allowedAreas = user.isAdmin ? const [] : user.areas;
+    if (_tanpaAksesArea) {
+      _results = const [];
+      _error = null;
+    }
 
     // Saringan yang sudah tidak masuk izin baru dibuang - kalau dibiarkan,
     // daftarnya kosong tanpa alasan yang terlihat operator.
@@ -53,8 +67,10 @@ class PrepareProvider extends ChangeNotifier {
   ///
   /// User yang dibatasi admin hanya melihat areanya sendiri; yang tidak
   /// dibatasi (mis. admin) melihat kelima area STO.
-  List<String> get areaPilihan =>
-      _allowedAreas.isNotEmpty ? _allowedAreas : AppConfig.areaSto;
+  List<String> get areaPilihan {
+    if (_tanpaAksesArea) return const [];
+    return _allowedAreas.isNotEmpty ? _allowedAreas : AppConfig.areaSto;
+  }
 
   /// Area yang benar-benar dipakai menyaring pencarian: satu area bila
   /// operator memilihnya, atau seluruh area yang menjadi haknya.
@@ -168,6 +184,10 @@ class PrepareProvider extends ChangeNotifier {
   }
 
   Future<void> _segarkanDiLatar() async {
+    // Tanpa izin area, master part tidak ditarik ke perangkat sama sekali -
+    // daftar area kosong akan dibaca repository sebagai "semua area", dan
+    // seluruh master ikut tersalin ke handheld yang tidak berhak melihatnya.
+    if (_tanpaAksesArea) return;
     await _partRepo.refreshIfStale(areas: _allowedAreas);
     _cacheInfo = await _partRepo.cacheInfo();
     // Hasil ikut dimuat ulang hanya bila layarnya memang masih kosong -
@@ -178,6 +198,18 @@ class PrepareProvider extends ChangeNotifier {
 
   Future<void> search(String keyword) async {
     _keyword = keyword;
+
+    // Tanpa area, tidak ada yang boleh dicari. Berhenti di sini - bukan
+    // mengirim permintaan tanpa saringan yang dijawab server dengan seluruh
+    // master part.
+    if (_tanpaAksesArea) {
+      _results = const [];
+      _hasMore = false;
+      _error = null;
+      notifyListeners();
+      return;
+    }
+
     _searching = true;
     _offset = 0;
     _hasMore = false;
@@ -203,6 +235,7 @@ class PrepareProvider extends ChangeNotifier {
 
   /// Lazy load halaman berikutnya (infinite scroll).
   Future<void> loadMore() async {
+    if (_tanpaAksesArea) return;
     if (_searching || _loadingMore || !_hasMore) return;
     _loadingMore = true;
     notifyListeners();
@@ -227,6 +260,7 @@ class PrepareProvider extends ChangeNotifier {
   }
 
   Future<void> refreshMaster() async {
+    if (_tanpaAksesArea) return;
     _searching = true;
     _offset = 0;
     _hasMore = false;
@@ -302,6 +336,11 @@ class PrepareProvider extends ChangeNotifier {
     final part = _selectedPart;
     if (part == null) {
       _error = 'Belum ada part yang dipilih.';
+      notifyListeners();
+      return false;
+    }
+    if (_qty <= 0) {
+      _error = 'Jumlah tag yang dicetak harus berupa bilangan positif dan lebih dari 0.';
       notifyListeners();
       return false;
     }

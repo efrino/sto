@@ -34,7 +34,19 @@ class AppDatabase {
     _db = await openDatabase(
       path,
       version: dbVersion,
-      onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+        try {
+          // WAL (Write-Ahead Logging): pembacaan & penulisan berjalan bersamaan
+          // tanpa mengunci database / UI thread.
+          await db.execute('PRAGMA journal_mode = WAL');
+          await db.execute('PRAGMA synchronous = NORMAL');
+          await db.execute('PRAGMA temp_store = MEMORY');
+          await db.execute('PRAGMA cache_size = -2000'); // 2MB memory cache
+        } catch (_) {
+          // Didiamkan untuk in-memory database saat testing
+        }
+      },
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -61,6 +73,9 @@ class AppDatabase {
     ''');
     await db.execute(
       'CREATE INDEX idx_parts_search ON $tableParts (search_index)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_parts_area ON $tableParts (area)',
     );
 
     await db.execute('''
@@ -96,6 +111,9 @@ class AppDatabase {
     ''');
     await db.execute('CREATE INDEX idx_tags_batch ON $tableTags (batch_id)');
     await db.execute('CREATE INDEX idx_tags_status ON $tableTags (status)');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_tags_status_sync ON $tableTags (status, sync_status)',
+    );
     await db.execute(
       'CREATE INDEX idx_tags_part ON $tableTags (part_number, job_number)',
     );
@@ -200,6 +218,9 @@ class AppDatabase {
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_counts_tag ON $tableCounts (tag_no)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_counts_nik ON $tableCounts (nik)',
     );
   }
 

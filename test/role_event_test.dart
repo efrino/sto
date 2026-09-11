@@ -25,10 +25,27 @@ void main() {
       expect(operator.areas, ['WAREHOUSE 1', 'WAREHOUSE 2']);
     });
 
-    test('operator tanpa area yang diatur admin dianggap tanpa batas', () {
+    test('operator tanpa area yang diatur admin TIDAK berhak ke area mana pun',
+        () {
+      // Dulu kosong dibaca "tanpa batas" - akun yang belum diatur justru
+      // paling leluasa, bisa mencetak tag untuk area apa saja. Pagar yang
+      // terbuka saat belum disetel adalah pagar yang salah arah.
       const belumDiatur = AppUser(nik: 'X.1', name: 'BARU');
-      expect(belumDiatur.hasAreaLimit, isFalse);
+      expect(belumDiatur.hasAreaLimit, isTrue);
+      expect(belumDiatur.tanpaAksesArea, isTrue);
+      expect(belumDiatur.areaDiizinkan(['IFPP', 'WELD']), isEmpty);
       expect(belumDiatur.areaLabel, 'Belum diatur');
+
+      // Admin tetap bebas walau daftarnya kosong.
+      expect(admin.tanpaAksesArea, isFalse);
+      expect(admin.areaDiizinkan(['IFPP', 'WELD']), ['IFPP', 'WELD']);
+
+      // Operator yang diberi area hanya dapat area itu.
+      expect(operator.tanpaAksesArea, isFalse);
+      expect(
+        operator.areaDiizinkan(['IFPP', 'WELD', 'WAREHOUSE 1']),
+        ['WAREHOUSE 1', 'WAREHOUSE 2'],
+      );
     });
 
     test('daftar area diterima sebagai teks maupun list', () {

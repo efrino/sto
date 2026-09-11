@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../core/config/app_config.dart';
@@ -45,6 +47,77 @@ class AdminProvider extends ChangeNotifier {
   String? _pesanPenegasan;
 
   bool get hasActiveEvent => _activeEvent != null;
+
+  // ------------------------------------------------------ denyut event
+  /// Jeda penyegaran keadaan event.
+  ///
+  /// Event dibuka/ditutup dan pencetakannya dinyalakan/dimatikan oleh admin
+  /// dari perangkat lain. Tanpa denyut ini, handheld operator baru tahu saat
+  /// ia kebetulan berpindah layar - sementara riwayat dan pesan sudah
+  /// menyegarkan diri sendiri. Sepuluh detik sejalan dengan yang lain.
+  static const Duration jedaEvent = Duration(seconds: 10);
+  Timer? _denyutEvent;
+
+  void mulaiDenyutEvent(AppUser user) {
+    _denyutEvent?.cancel();
+    _denyutEvent = Timer.periodic(jedaEvent, (_) => _segarkanEventDiam(user));
+  }
+
+  void hentikanDenyutEvent() {
+    _denyutEvent?.cancel();
+    _denyutEvent = null;
+  }
+
+  @override
+  void dispose() {
+    _denyutEvent?.cancel();
+    super.dispose();
+  }
+
+  /// Menarik ulang event tanpa tanda memuat, dan hanya membangun ulang layar
+  /// bila ada yang benar-benar berubah.
+  Future<void> _segarkanEventDiam(AppUser user) async {
+    if (_loading) return;
+    try {
+      final baru = await _repo.syncEvents(user);
+
+      // syncEvents mengembalikan daftar kosong saat server tidak terjangkau
+      // (dan mengisi peringatanSinkron). Itu BUKAN "tidak ada event" - kalau
+      // ditelan apa adanya, pita di beranda berteriak "belum ada event"
+      // setiap kali Wi-Fi pabrik tersendat sebentar.
+      if (baru.isEmpty && _repo.peringatanSinkron != null) return;
+
+      final aktifBaru = await _repo.activeEvent();
+      if (_eventSama(baru, _events) && _eventSama1(aktifBaru, _activeEvent)) {
+        return;
+      }
+
+      _events = baru;
+      _activeEvent = aktifBaru;
+      notifyListeners();
+    } catch (_) {
+      // Diam saja - keadaan yang lama tetap ditampilkan.
+    }
+  }
+
+  static bool _eventSama1(StoEvent? a, StoEvent? b) {
+    if (a == null || b == null) return a == b;
+    return a.id == b.id &&
+        a.status == b.status &&
+        a.bolehCetak == b.bolehCetak &&
+        a.totalTim == b.totalTim &&
+        a.startDate == b.startDate &&
+        a.endDate == b.endDate &&
+        a.name == b.name;
+  }
+
+  static bool _eventSama(List<StoEvent> a, List<StoEvent> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_eventSama1(a[i], b[i])) return false;
+    }
+    return true;
+  }
 
   /// Event yang paling perlu diketahui hari ini - untuk kartu di beranda.
   ///

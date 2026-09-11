@@ -173,16 +173,18 @@ class TagScannerState extends State<TagScanner> {
     return Stack(
       alignment: Alignment.center,
       children: [
-        MobileScanner(
-          controller: _controller,
-          onDetect: (capture) {
-            if (capture.barcodes.isEmpty) return;
-            _emit(capture.barcodes.first.rawValue);
-          },
-          errorBuilder: (context, error) => _kameraMati(error),
-          placeholderBuilder: (context) => Container(
-            color: const Color(0xFF14181F),
-            child: const Center(child: CircularProgressIndicator()),
+        RepaintBoundary(
+          child: MobileScanner(
+            controller: _controller,
+            onDetect: (capture) {
+              if (capture.barcodes.isEmpty) return;
+              _emit(capture.barcodes.first.rawValue);
+            },
+            errorBuilder: (context, error) => _kameraMati(error),
+            placeholderBuilder: (context) => Container(
+              color: const Color(0xFF14181F),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
           ),
         ),
         Container(
@@ -196,41 +198,43 @@ class TagScannerState extends State<TagScanner> {
         Positioned(
           top: 16,
           right: 16,
-          child: ValueListenableBuilder<MobileScannerState>(
-            valueListenable: _controller,
-            builder: (context, state, child) {
-              final isOn = state.torchState == TorchState.on;
-              return Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _controller.toggleTorch(),
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: isOn
-                          ? const Color(0xFFFBBF24).withValues(alpha: 0.9)
-                          : Colors.black.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                      border: Border.all(
+          child: RepaintBoundary(
+            child: ValueListenableBuilder<MobileScannerState>(
+              valueListenable: _controller,
+              builder: (context, state, child) {
+                final isOn = state.torchState == TorchState.on;
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _controller.toggleTorch(),
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
                         color: isOn
-                            ? const Color(0xFFF59E0B)
-                            : Colors.white38,
-                        width: 1.5,
+                            ? const Color(0xFFFBBF24).withValues(alpha: 0.9)
+                            : Colors.black.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isOn
+                              ? const Color(0xFFF59E0B)
+                              : Colors.white38,
+                          width: 1.5,
+                        ),
                       ),
-                    ),
-                    child: Tooltip(
-                      message: isOn ? 'Matikan flash' : 'Nyalakan flash',
-                      child: Icon(
-                        isOn ? Icons.flash_on : Icons.flash_off,
-                        size: 22,
-                        color: isOn ? const Color(0xFF78350F) : Colors.white,
+                      child: Tooltip(
+                        message: isOn ? 'Matikan flash' : 'Nyalakan flash',
+                        child: Icon(
+                          isOn ? Icons.flash_on : Icons.flash_off,
+                          size: 22,
+                          color: isOn ? const Color(0xFF78350F) : Colors.white,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
         if (widget.busy)

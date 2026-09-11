@@ -207,6 +207,22 @@ class TagDao {
     await batch.commit(noResult: true);
   }
 
+  /// Menandai kiriman yang DITOLAK server - bukan yang belum sampai.
+  ///
+  /// Dipakai saat server menjawab dengan penolakan tetap (4xx): mengulang
+  /// kirimannya tidak akan pernah berhasil, jadi barisnya diberi tanda dan
+  /// dikeluarkan dari antrean. Tanpa ini lencana "belum sinkron" menyala
+  /// selamanya dan operator tidak tahu apa yang salah.
+  Future<void> markFailed(String tagNo) async {
+    final db = await _db.database;
+    await db.update(
+      AppDatabase.tableTags,
+      {'sync_status': SyncStatus.failed.name},
+      where: 'tag_no = ?',
+      whereArgs: [tagNo],
+    );
+  }
+
 
   /// Menimpa baris lokal dengan keadaan terakhir dari server.
   ///

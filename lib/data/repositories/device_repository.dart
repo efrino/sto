@@ -66,53 +66,14 @@ class DeviceRepository {
     return dao.findById(id.deviceId);
   }
 
-  /// Mencoba mencari nama perangkat di server berdasarkan ANDROID_ID.
-  ///
-  /// Dipakai saat aplikasi baru dipasang ulang (bekas uninstall) agar operator
-  /// tidak perlu mengetik ulang nama perangkat yang sudah terdaftar di server.
-  Future<String?> pulihkanNamaDariServer() async {
-    try {
-      final identitas = await identity();
-      final androidId = identitas.deviceId.trim();
-      if (androidId.isEmpty) return null;
-
-      // Coba periksa ke server apakah ANDROID_ID ini sudah ada di database
-      const adminNiks = ['E.9948', 'F.9964', 'S.9390'];
-      for (final nik in adminNiks) {
-        try {
-          final detail = await api.fetchDeviceDetail(
-            nik,
-            androidId: androidId,
-          );
-          if (detail != null) {
-            final nama = '${detail['name'] ?? ''}'.trim();
-            final idServer = (detail['id'] as num?)?.toInt();
-            if (nama.isNotEmpty) {
-              final device = await ensureRegistered(registeredBy: nik);
-              await dao.save(
-                device.copyWith(
-                  assetName: nama,
-                  serverId: idServer,
-                  lastSeenAt: DateTime.now(),
-                ),
-              );
-              return nama;
-            }
-          }
-          break; // Jika server merespons (meski kosong), tidak perlu ulang NIK lain
-        } on ApiException catch (e) {
-          if (e.statusCode == 404) {
-            // Perangkat memang belum pernah didaftarkan di server
-            return null;
-          }
-          // Jika NIK tidak dikenali / 403, coba NIK cadangan berikutnya
-        }
-      }
-    } catch (_) {
-      // Abaikan bila sedang offline
-    }
-    return null;
-  }
+  // Pemulihan nama perangkat dari server saat pasang ulang SENGAJA dibuang.
+  // Cara satu-satunya adalah memanggil device-detail (khusus admin) memakai
+  // NIK admin yang ditanam di APK - dan NIK yang tertanam bisa dibaca siapa
+  // pun yang membongkar APK-nya. Tanpa kata sandi, itu kunci penuh ke
+  // seluruh sistem, ditukar dengan penghematan satu kali ketik nama.
+  // Server tetap menyimpan nama lamanya: klaim perangkat tidak menimpa nama
+  // yang sudah ada, jadi yang diketik ulang hanya berlaku bila perangkatnya
+  // memang belum pernah terdaftar.
 
   /// Menyimpan keputusan server setelah login berhasil.
   ///

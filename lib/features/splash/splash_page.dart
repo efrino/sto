@@ -59,18 +59,14 @@ class _SplashPageState extends State<SplashPage> {
     if (!mounted) return;
 
     // Perangkat yang belum bernama diantar ke layar penamaan lebih dulu.
-    // Namun bila ANDROID_ID perangkat ini sudah terdaftar di server
-    // (mis. habis uninstall lalu install ulang), nama perangkat langsung
-    // dipulihkan dari server tanpa perlu ditanyakan lagi ke operator.
+    // Namanya dibutuhkan sebelum siapa pun login: itulah yang dipakai
+    // perangkat ini mendaftarkan diri ke server saat operator masuk.
+    //
+    // Pemulihan nama dari server saat pasang ulang sengaja tidak ada - lihat
+    // catatan di DeviceRepository. Mengetik ulang nama sekali lebih murah
+    // daripada menanam NIK admin di APK.
     final deps = context.read<AppDependencies>();
-    var namaPerangkat = await deps.prefs.namaPerangkat();
-    if (namaPerangkat.trim().isEmpty) {
-      final pulih = await deps.deviceRepository.pulihkanNamaDariServer();
-      if (pulih != null && pulih.isNotEmpty) {
-        await deps.prefs.setNamaPerangkat(pulih);
-        namaPerangkat = pulih;
-      }
-    }
+    final namaPerangkat = await deps.prefs.namaPerangkat();
     if (!mounted) return;
 
     final tujuan = session.status == SessionStatus.authenticated
@@ -103,7 +99,7 @@ class _SplashPageState extends State<SplashPage> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Cetak Tag STO - Blueprint MPOS 332',
+              'All in OneApp',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const Spacer(),

@@ -90,8 +90,23 @@ class AppUser {
 
   bool get isAdmin => role == UserRole.admin;
 
-  /// Admin selalu bebas; operator dibatasi bila daftar areanya diisi.
-  bool get hasAreaLimit => !isAdmin && areas.isNotEmpty;
+  /// Admin selalu bebas; operator SELALU dibatasi daftar areanya.
+  ///
+  /// Daftar yang kosong pada operator bukan berarti "semua area" - berarti
+  /// admin belum memberinya area sama sekali, dan sampai itu dilakukan ia
+  /// tidak boleh menyiapkan tag di mana pun. Membaca kosong sebagai "bebas"
+  /// membuat akun yang belum diatur justru paling leluasa.
+  bool get hasAreaLimit => !isAdmin;
+
+  /// Operator yang belum diberi area satu pun oleh admin.
+  bool get tanpaAksesArea => !isAdmin && areas.isEmpty;
+
+  /// Area yang benar-benar boleh dipakai user ini.
+  ///
+  /// Admin: seluruh area STO. Operator: persis yang diberikan admin - dan
+  /// kosong berarti kosong.
+  List<String> areaDiizinkan(List<String> semuaArea) =>
+      isAdmin ? semuaArea : areas;
 
   bool can(AppPermission permission) =>
       isAdmin || permissions.contains(permission);

@@ -51,15 +51,6 @@ class _NamaPerangkatPageState extends State<NamaPerangkatPage> {
     final identitas = await deps.deviceRepository.identity();
     if (!mounted) return;
     setState(() => _model = identitas.model);
-
-    final pulih = await deps.deviceRepository.pulihkanNamaDariServer();
-    if (!mounted) return;
-    if (pulih != null && pulih.isNotEmpty) {
-      await deps.prefs.setNamaPerangkat(pulih);
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, AppRoutes.login);
-      }
-    }
   }
 
   Future<void> _lanjut() async {
@@ -190,7 +181,7 @@ class _NamaPerangkatPageState extends State<NamaPerangkatPage> {
               const SizedBox(height: 26),
               Center(
                 child: Text(
-                  '${AppConfig.appName} v1.0.0',
+                  '${AppConfig.appName} v1.1.0',
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textMuted,

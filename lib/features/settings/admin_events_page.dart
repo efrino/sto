@@ -290,12 +290,16 @@ class _EventTile extends StatelessWidget {
               children: [
                 Icon(_ikonJadwal(jadwal), size: 13, color: _warnaJadwal(jadwal)),
                 const SizedBox(width: 4),
-                Text(
-                  event.jadwalLabel(),
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: _warnaJadwal(jadwal),
+                Flexible(
+                  child: Text(
+                    event.jadwalLabel(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: _warnaJadwal(jadwal),
+                    ),
                   ),
                 ),
               ],

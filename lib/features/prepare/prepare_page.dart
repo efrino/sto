@@ -52,12 +52,21 @@ class _PreparePageState extends State<PreparePage> {
     super.dispose();
   }
 
+  bool get _isQtyInvalid {
+    final teks = _qtyController.text.trim();
+    if (teks.isEmpty) return true;
+    final val = int.tryParse(teks);
+    return val == null || val <= 0;
+  }
+
   void _setQty(int value) {
+    final clamped = value.clamp(1, AppConfig.maxTagPerBatch);
     final provider = context.read<PrepareProvider>();
-    provider.setQty(value);
-    _qtyController.text = '${provider.qty}';
+    provider.setQty(clamped);
+    _qtyController.text = '$clamped';
     _qtyController.selection =
         TextSelection.collapsed(offset: _qtyController.text.length);
+    setState(() {});
   }
 
   /// Penanda sibuk milik layar - menyala SEBELUM `await` pertama.
@@ -82,6 +91,15 @@ class _PreparePageState extends State<PreparePage> {
     final admin = context.read<AdminProvider>();
     final user = context.read<SessionProvider>().user;
     if (user == null) return;
+
+    // Pengaman: Jumlah tag tidak boleh kosong, 0, atau negatif.
+    if (_isQtyInvalid) {
+      AppFeedback.error(
+        context,
+        'Total TAG kosong / 0 / negatif. Isi jumlah tag yang valid (minimal 1).',
+      );
+      return;
+    }
 
     // Area part berbeda dari area yang sedang disaring operator - ditanya
     // lebih dulu, SEBELUM nomor tag diminta ke server.
@@ -252,7 +270,9 @@ class _PreparePageState extends State<PreparePage> {
                   children: [
                     _stepperButton(
                       Icons.remove,
-                      () => _setQty(provider.qty - 1),
+                      (!_isQtyInvalid && provider.qty > 1)
+                          ? () => _setQty(provider.qty - 1)
+                          : null,
                     ),
                     Expanded(
                       child: Padding(
@@ -270,14 +290,41 @@ class _PreparePageState extends State<PreparePage> {
                             fontWeight: FontWeight.w800,
                             color: AppColors.navy,
                           ),
+                          decoration: InputDecoration(
+                            errorText: _isQtyInvalid
+                                ? 'Total TAG kosong / 0 / negatif'
+                                : null,
+                            errorStyle: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           onChanged: (value) {
                             final parsed = int.tryParse(value);
-                            if (parsed != null) provider.setQty(parsed);
+                            if (parsed != null) {
+                              if (parsed > AppConfig.maxTagPerBatch) {
+                                _qtyController.text =
+                                    '${AppConfig.maxTagPerBatch}';
+                                _qtyController.selection =
+                                    TextSelection.collapsed(
+                                  offset: _qtyController.text.length,
+                                );
+                                provider.setQty(AppConfig.maxTagPerBatch);
+                              } else if (parsed > 0) {
+                                provider.setQty(parsed);
+                              }
+                            }
+                            setState(() {});
                           },
                         ),
                       ),
                     ),
-                    _stepperButton(Icons.add, () => _setQty(provider.qty + 1)),
+                    _stepperButton(
+                      Icons.add,
+                      (!_isQtyInvalid && provider.qty < AppConfig.maxTagPerBatch)
+                          ? () => _setQty(provider.qty + 1)
+                          : () => _setQty(1),
+                    ),
                   ],
                 ),
                 // Baris saran ikut hilang bila tidak ada angka yang tersisa -
@@ -289,13 +336,13 @@ class _PreparePageState extends State<PreparePage> {
                       .map(
                         (value) => ChoiceChip(
                           label: Text('$value tag'),
-                          selected: provider.qty == value,
+                          selected: !_isQtyInvalid && provider.qty == value,
                           onSelected: (_) => _setQty(value),
                           selectedColor: AppColors.primarySoft,
                           labelStyle: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: provider.qty == value
+                            color: (!_isQtyInvalid && provider.qty == value)
                                 ? AppColors.primary
                                 : AppColors.textSecondary,
                           ),
@@ -324,7 +371,10 @@ class _PreparePageState extends State<PreparePage> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: ElevatedButton.icon(
-            onPressed: provider.generating || _menyiapkan || !bolehCetak
+            onPressed: provider.generating ||
+                    _menyiapkan ||
+                    !bolehCetak ||
+                    _isQtyInvalid
                 ? null
                 : _generate,
             icon: provider.generating || _menyiapkan
@@ -340,14 +390,16 @@ class _PreparePageState extends State<PreparePage> {
             label: Text(
               provider.generating || _menyiapkan
                   ? 'Membuat nomor tag...'
-                  : bolehCetak
-                      ? 'BUAT & CETAK ${provider.qty} TAG'
-                      // Tombol mati tanpa keterangan selalu terbaca sebagai
-                      // kerusakan. Sebabnya ditulis di tombolnya sendiri,
-                      // bukan disembunyikan di pita atas layar.
-                      : activeEvent == null
-                          ? 'BELUM ADA EVENT BERJALAN'
-                          : 'PENCETAKAN TAG SEDANG DITUTUP',
+                  : _isQtyInvalid
+                      ? 'JUMLAH TAG TIDAK VALID'
+                      : bolehCetak
+                          ? 'BUAT & CETAK ${provider.qty} TAG'
+                          // Tombol mati tanpa keterangan selalu terbaca sebagai
+                          // kerusakan. Sebabnya ditulis di tombolnya sendiri,
+                          // bukan disembunyikan di pita atas layar.
+                          : activeEvent == null
+                              ? 'BELUM ADA EVENT BERJALAN'
+                              : 'PENCETAKAN TAG SEDANG DITUTUP',
             ),
           ),
         ),
@@ -429,7 +481,8 @@ class _PreparePageState extends State<PreparePage> {
     );
   }
 
-  Widget _stepperButton(IconData icon, VoidCallback onTap) {
+  Widget _stepperButton(IconData icon, VoidCallback? onTap) {
+    final disabled = onTap == null;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -440,10 +493,16 @@ class _PreparePageState extends State<PreparePage> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: AppColors.navySoft,
+          color: disabled
+              ? AppColors.border.withValues(alpha: 0.3)
+              : AppColors.navySoft,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: AppColors.navy, size: 22),
+        child: Icon(
+          icon,
+          color: disabled ? AppColors.textMuted : AppColors.navy,
+          size: 22,
+        ),
       ),
     );
   }

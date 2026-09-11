@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/pesan_galat.dart';
 
 /// Helper notifikasi & dialog konfirmasi supaya gaya pesan seragam.
 class AppFeedback {
@@ -9,8 +10,15 @@ class AppFeedback {
   static void success(BuildContext context, String message) =>
       _show(context, message, AppColors.success, Icons.check_circle);
 
-  static void error(BuildContext context, String message) =>
-      _show(context, message, AppColors.danger, Icons.error_outline);
+  /// Pesan galat disapu lebih dulu: apa pun yang sampai ke sini - termasuk
+  /// bunyi mentah dari plugin atau database - keluar sebagai kalimat yang
+  /// bisa ditindaklanjuti operator, bukan jejak teknis.
+  static void error(BuildContext context, Object message) => _show(
+        context,
+        PesanGalat.manusiawi(message),
+        AppColors.danger,
+        Icons.error_outline,
+      );
 
   static void info(BuildContext context, String message) =>
       _show(context, message, AppColors.navy, Icons.info_outline);

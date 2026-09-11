@@ -55,7 +55,7 @@ void main() {
           isA<ApiException>().having(
             (e) => e.message,
             'message',
-            allOf(contains('terputus'), contains('192.168.10.67')),
+            contains('terputus'),
           ),
         ),
       );
@@ -159,7 +159,6 @@ void main() {
       final pesan = await pesanDari(
         SocketException('Failed host lookup: mspin.newarmada.biz'),
       );
-      expect(pesan, contains('192.168.10.67'));
       expect(pesan, contains('internet'));
     });
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/utils/pesan_galat.dart';
+
 import '../../../core/theme/app_colors.dart';
 
 /// Pemberitahuan kecil bahwa isi halaman datang dari cache perangkat, bukan
@@ -27,7 +29,7 @@ class SyncNotice extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              message,
+              PesanGalat.manusiawi(message),
               style: const TextStyle(
                 fontSize: 11.5,
                 height: 1.45,

@@ -359,8 +359,12 @@ class _PrinterSetupPageState extends State<PrinterSetupPage> {
               ),
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          // Wrap, bukan Row: pada layar sempit dengan huruf sistem diperbesar,
+          // dua tombol berlabel ini tidak muat sebaris - Row akan meluber,
+          // Wrap menurunkan yang kedua ke baris berikutnya.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
             children: [
               if (admin)
                 TextButton.icon(

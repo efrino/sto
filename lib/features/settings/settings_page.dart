@@ -306,7 +306,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 18),
           const Center(
             child: Text(
-              '${AppConfig.appName} v1.0.0\n${AppConfig.companyName} - ${AppConfig.departement}',
+              '${AppConfig.appName} v1.1.0\n${AppConfig.companyName} - ${AppConfig.departement}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11,

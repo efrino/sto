@@ -229,14 +229,12 @@ class ApiClient {
     // yang bermasalah, bukan servernya.
     if (teksAwal.contains('Failed host lookup') ||
         teksAwal.contains('nodename nor servname')) {
-      return 'Alamat $alamat tidak bisa ditemukan. Perangkat ini belum '
-          'terhubung internet, atau memakai Wi-Fi yang tidak bisa menjangkau '
-          'server itu.';
+      return 'Server tidak terjangkau. Perangkat ini belum '
+          'terhubung internet.';
     }
 
     if (error is SocketException || error is HttpException) {
-      return 'Server $alamat tidak terjangkau. Periksa Wi-Fi perangkat, '
-          'atau alamat server di menu Setting.';
+      return 'Server tidak terjangkau. Periksa Wi-Fi perangkat.';
     }
     if (error is FormatException) {
       return 'Balasan server tidak bisa dibaca (bukan JSON). '
@@ -245,7 +243,7 @@ class ApiClient {
     final teks = '$error';
 
     if (_karenaSambunganTerputus(error)) {
-      return 'Sambungan ke server $alamat terputus sebelum balasan lengkap. '
+      return 'Sambungan ke server terputus sebelum balasan lengkap. '
           'Coba sekali lagi.';
     }
 
@@ -254,8 +252,7 @@ class ApiClient {
         teks.contains('Connection failed') ||
         teks.contains('Connection refused') ||
         teks.contains('Network is unreachable')) {
-      return 'Server $alamat tidak terjangkau. Periksa Wi-Fi perangkat, '
-          'atau alamat server di menu Setting.';
+      return 'Server tidak terjangkau. Periksa Wi-Fi perangkat.';
     }
     return 'Gagal terhubung ke server: $teks';
   }

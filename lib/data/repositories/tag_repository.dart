@@ -121,6 +121,11 @@ class TagRepository {
   }) async {
     final area = (areaOverride?.isNotEmpty ?? false) ? areaOverride! : part.area;
 
+    if (qty <= 0) {
+      throw TagStateException(
+        'Jumlah tag harus berupa bilangan positif dan lebih dari 0.',
+      );
+    }
     if (qty > AppConfig.maxTagPerBatch) {
       throw TagStateException(
         'Maksimal ${AppConfig.maxTagPerBatch} tag sekali cetak.',

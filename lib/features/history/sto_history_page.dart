@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/debouncer.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/pesan_galat.dart';
 import '../../core/widgets/app_feedback.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/section_card.dart';
@@ -474,9 +475,12 @@ class _StoHistoryViewState extends State<StoHistoryView> {
           }
 
           final b = baris[i - 2];
-          return b.cetak != null
-              ? _barisCetak(b.cetak!, admin: admin)
-              : _barisHitung(b.hitung!);
+          return RepaintBoundary(
+            key: ValueKey('sto_${b.tagNo}_${b.cetak != null ? 'p' : 'c'}'),
+            child: b.cetak != null
+                ? _barisCetak(b.cetak!, admin: admin)
+                : _barisHitung(b.hitung!),
+          );
         },
       ),
     );
@@ -510,7 +514,9 @@ class _StoHistoryViewState extends State<StoHistoryView> {
     );
   }
 
-  Widget _peringatan(String pesan) => Container(
+  Widget _peringatan(String pesanMentah) {
+    final pesan = PesanGalat.manusiawi(pesanMentah);
+    return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.dangerSoft,
@@ -529,6 +535,7 @@ class _StoHistoryViewState extends State<StoHistoryView> {
           ],
         ),
       );
+  }
 
   // ------------------------------------------------------- baris cetak
   Widget _barisCetak(PrintEntry entry, {required bool admin}) {
@@ -723,7 +730,7 @@ class _StoHistoryViewState extends State<StoHistoryView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (sheet) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -780,7 +787,7 @@ class _StoHistoryViewState extends State<StoHistoryView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (sheet) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -868,50 +875,10 @@ class _StoHistoryViewState extends State<StoHistoryView> {
     final user = context.read<SessionProvider>().user;
     if (user == null) return;
 
-    final kolom = TextEditingController(text: '${count.qty}');
     final angka = await showDialog<int>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text('Ubah qty ${count.tagNo}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Tersimpan sekarang: ${count.qty} ${count.unit} '
-              '(tim ${count.team}).',
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: kolom,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: 'Qty baru',
-                suffixText: count.unit,
-              ),
-              onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v.trim())),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialog, int.tryParse(kolom.text.trim())),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
+      builder: (dialog) => _UbahQtyDialog(count: count),
     );
-    kolom.dispose();
 
     if (angka == null || !mounted) return;
 
@@ -1009,3 +976,73 @@ class _StoHistoryViewState extends State<StoHistoryView> {
     );
   }
 }
+
+class _UbahQtyDialog extends StatefulWidget {
+  const _UbahQtyDialog({required this.count});
+  final StoCount count;
+
+  @override
+  State<_UbahQtyDialog> createState() => _UbahQtyDialogState();
+}
+
+class _UbahQtyDialogState extends State<_UbahQtyDialog> {
+  late final TextEditingController _kolom;
+
+  @override
+  void initState() {
+    super.initState();
+    _kolom = TextEditingController(text: '${widget.count.qty}');
+  }
+
+  @override
+  void dispose() {
+    _kolom.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.count;
+    return AlertDialog(
+      title: Text('Ubah qty ${count.tagNo}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tersimpan sekarang: ${count.qty} ${count.unit} (tim ${count.team}).',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _kolom,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Qty baru',
+                suffixText: count.unit,
+              ),
+              onSubmitted: (v) => Navigator.pop(context, int.tryParse(v.trim())),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, int.tryParse(_kolom.text.trim())),
+          child: const Text('Simpan'),
+        ),
+      ],
+    );
+  }
+}
+

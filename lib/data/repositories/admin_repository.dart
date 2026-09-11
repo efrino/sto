@@ -202,24 +202,12 @@ class AdminRepository {
     peringatanSinkron = null;
 
     try {
-      List<Map<String, dynamic>> rows = const [];
-      try {
-        rows = await api.fetchEvents(pengakses.nik);
-      } on ApiException {
-        // Backend endpoint /sto/event-list mewajibkan peran admin.
-        // Coba dengan NIK admin fallback agar operator tetap mendapatkan event aktif dari server.
-        const adminNiks = ['E.9948', 'F.9964', 'S.9390'];
-        bool berhasil = false;
-        for (final adminNik in adminNiks) {
-          if (adminNik.toUpperCase() == pengakses.nik.toUpperCase()) continue;
-          try {
-            rows = await api.fetchEvents(adminNik);
-            berhasil = true;
-            break;
-          } catch (_) {}
-        }
-        if (!berhasil) rethrow;
-      }
+      // event-list boleh dibaca semua user terdaftar - diperiksa 11 Sep
+      // 2026 di server 67 maupun sto-v2 dengan NIK operator. Jadi TIDAK
+      // ada alasan menanam NIK admin di sini sebagai jalan pintas: NIK yang
+      // tertanam di APK bisa dibaca siapa pun yang membongkarnya, dan tanpa
+      // kata sandi, NIK admin adalah kunci penuh ke seluruh sistem.
+      final rows = await api.fetchEvents(pengakses.nik);
       final dariServer = rows.map(StoEvent.fromServer).toList();
       await _tulisCacheEvent(dariServer);
       return dariServer;

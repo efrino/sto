@@ -203,6 +203,19 @@ class _PartSearchPageState extends State<PartSearchPage> {
   static const String sep = ', ';
 
   Widget _results(PrepareProvider provider) {
+    // Disebut terang-terangan, sebelum apa pun: operator yang melihat daftar
+    // kosong akan mengira master partnya belum diunduh dan menekan tombol
+    // unduh berulang kali - padahal yang kurang adalah izin dari admin.
+    if (provider.tanpaAksesArea) {
+      return const EmptyState(
+        icon: Icons.lock_outline,
+        title: 'Area kerja belum diatur',
+        message: 'Akun Anda belum diberi area oleh admin, jadi belum bisa '
+            'menyiapkan tag di area mana pun. Minta admin mengisinya lewat '
+            'Setting > User & Izin.',
+      );
+    }
+
     if (provider.searching && provider.results.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }

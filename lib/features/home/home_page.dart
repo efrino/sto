@@ -54,22 +54,34 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   ChatProvider? _chat;
+  AdminProvider? _admin;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _refresh();
+      if (!mounted) return;
+      // Beranda tetap hidup di bawah layar Siapkan/Scan yang dibuka di
+      // atasnya, jadi denyut yang dinyalakan di sini ikut menyegarkan pita
+      // event di layar-layar itu juga - event dibuka/ditutup dan pencetakan
+      // dinyalakan/dimatikan admin dari perangkat lain.
+      final user = context.read<SessionProvider>().user;
+      if (user != null) _admin?.mulaiDenyutEvent(user);
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _chat = context.read<ChatProvider>();
+    _admin = context.read<AdminProvider>();
   }
 
   @override
   void dispose() {
     _chat?.hentikanDenyutDaftar();
+    _admin?.hentikanDenyutEvent();
     super.dispose();
   }
 
@@ -144,6 +156,8 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final user = context.watch<SessionProvider>().user;
     final isAdmin = user?.isAdmin ?? false;
+    final admin = context.watch<AdminProvider>();
+    final hasActiveEvent = admin.hasActiveEvent;
     final counts = context.watch<CountProvider>();
     final printer = context.watch<PrinterProvider>();
     final cetak = context.watch<PrintHistoryProvider>().history;
@@ -178,20 +192,20 @@ class _HomePageState extends State<HomePage> {
                   // Event ditaruh di atas ringkasan: tanpa event yang
                   // berjalan, angka apa pun di bawahnya tidak akan bertambah
                   // hari ini - itu yang perlu diketahui lebih dulu.
-                  _pitaEvent(context.watch<AdminProvider>().eventDisorot),
+                  _pitaEvent(admin.eventDisorot),
                   const SizedBox(height: 10),
                   _summaryCard(summary, cetak, counts, user),
                   const SizedBox(height: 12),
-                  // Kartu aksi dibuat setara bentuknya, dan hanya yang
-                  // haknya diberikan admin yang ditampilkan.
-                  _actionRow(user),
-                  // Tag OK memakai bentuk kartu yang sama dengan tag STO -
-                  // aksinya memang sejenis. Yang membedakan hanya warnanya
-                  // (navy) dan keterangan kecil di bawah judul, supaya
-                  // operator tidak salah masuk menu saat terburu-buru.
-                  if (user?.punyaTagOk ?? false) ...[
-                    const SizedBox(height: 10),
-                    _actionRowTagOk(user),
+                  // Kartu aksi (Prepare, Scan, Batal STO & Tag OK) hanya
+                  // ditampilkan saat ada event STO yang sedang aktif.
+                  if (hasActiveEvent) ...[
+                    _actionRow(user),
+                    if (user?.punyaTagOk ?? false) ...[
+                      const SizedBox(height: 10),
+                      _actionRowTagOk(user),
+                    ],
+                  ] else ...[
+                    _tidakAdaEventCard(isAdmin),
                   ],
                   // Jarak sedikit lebih lebar sebelum Riwayat & Setting:
                   // keduanya bukan aksi lapangan, jadi dipisahkan dari
@@ -235,7 +249,7 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 16),
                   Center(
                     child: Text(
-                      '${AppConfig.appName} v1.0.0',
+                      '${AppConfig.appName} v1.1.0',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textMuted,
@@ -436,9 +450,10 @@ class _HomePageState extends State<HomePage> {
         ? 'Printer tersambung (${printer.statusLabel})'
         : (printer.sebabGagal ?? 'Printer belum tersambung - ketuk untuk coba lagi');
 
-    return Tooltip(
-      message: tooltip,
-      child: Material(
+    return RepaintBoundary(
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: (connected || busy) ? null : () => printer.cobaLagi(),
@@ -520,8 +535,9 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Baris kartu aksi sesuai hak akses user.
   Widget _actionRow(AppUser? user) {
@@ -613,6 +629,69 @@ class _HomePageState extends State<HomePage> {
     Color(0xFF0B1B33),
   ];
 
+  /// Kartu pemberitahuan saat tidak ada event STO yang sedang aktif berjalan.
+  Widget _tidakAdaEventCard(bool isAdmin) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(
+              color: AppColors.dangerSoft,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.event_busy,
+              size: 26,
+              color: AppColors.danger,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Tidak Ada Event STO Aktif',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            isAdmin
+                ? 'Semua Fitur disembunyikan karena belum ada event aktif. Buka menu Setting > Event untuk memulai event.'
+                : 'Belum ada event STO yang aktif berjalan.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (isAdmin) ...[
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => _openThenRefresh(AppRoutes.adminEvents),
+              icon: const Icon(Icons.event, size: 17),
+              label: const Text('Buka Menu Event STO'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   /// Keadaan event STO hari ini, sebagai pita satu baris.
   ///
   /// Dulu ini kartu setinggi tiga baris. Di layar handheld, tinggi itu cukup
@@ -665,28 +744,30 @@ class _HomePageState extends State<HomePage> {
         },
     };
 
-    return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: latar,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          Icon(ikon, size: 15, color: warna),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TeksBerjalan(
-              teks: teks,
-              gaya: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                color: warna,
+    return RepaintBoundary(
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: latar,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Icon(ikon, size: 15, color: warna),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TeksBerjalan(
+                teks: teks,
+                gaya: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: warna,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

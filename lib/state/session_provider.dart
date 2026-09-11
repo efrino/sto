@@ -66,7 +66,7 @@ class SessionProvider extends ChangeNotifier {
       notifyListeners();
     } on ApiException catch (e) {
       if (!_tolakanServer(e)) return;
-      _pesanKeluar = 'Sesi Anda telah berakhir karena akun ini login di perangkat lain.';
+      _pesanKeluar = 'Sesi Anda telah berakhir. Silahkan login kembali.';
       await logout();
       AppNavigator.key.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
     } catch (_) {

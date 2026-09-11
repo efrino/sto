@@ -195,7 +195,13 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         itemCount: tagok.riwayat.length,
         separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, i) => _tile(tagok.riwayat[i]),
+        itemBuilder: (context, i) {
+          final t = tagok.riwayat[i];
+          return RepaintBoundary(
+            key: ValueKey('tagok_${t.idTagOk}'),
+            child: _tile(t),
+          );
+        },
       ),
     );
   }
@@ -295,7 +301,7 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (sheet) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -415,50 +421,10 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
     final user = context.read<SessionProvider>().user;
     if (user == null) return;
 
-    final kolom = TextEditingController(text: '${tag.qtyScan ?? 0}');
     final angka = await showDialog<int>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text('Ubah qty ${tag.idTagOk}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Tersimpan sekarang: ${tag.qtyScan} pcs '
-              '(dicatat ${tag.scannedBy}).',
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: kolom,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Qty baru',
-                suffixText: 'pcs',
-              ),
-              onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v.trim())),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Batal'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialog, int.tryParse(kolom.text.trim())),
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
+      builder: (dialog) => _UbahQtyTagOkDialog(tag: tag),
     );
-    kolom.dispose();
 
     if (angka == null || !mounted) return;
 
@@ -513,3 +479,73 @@ class _TagOkHistoryViewState extends State<TagOkHistoryView> {
     return (AppColors.textSecondary, AppColors.background);
   }
 }
+
+class _UbahQtyTagOkDialog extends StatefulWidget {
+  const _UbahQtyTagOkDialog({required this.tag});
+  final TagOk tag;
+
+  @override
+  State<_UbahQtyTagOkDialog> createState() => _UbahQtyTagOkDialogState();
+}
+
+class _UbahQtyTagOkDialogState extends State<_UbahQtyTagOkDialog> {
+  late final TextEditingController _kolom;
+
+  @override
+  void initState() {
+    super.initState();
+    _kolom = TextEditingController(text: '${widget.tag.qtyScan ?? 0}');
+  }
+
+  @override
+  void dispose() {
+    _kolom.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tag = widget.tag;
+    return AlertDialog(
+      title: Text('Ubah qty ${tag.idTagOk}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tersimpan sekarang: ${tag.qtyScan} pcs (dicatat ${tag.scannedBy}).',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _kolom,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Qty baru',
+                suffixText: 'pcs',
+              ),
+              onSubmitted: (v) => Navigator.pop(context, int.tryParse(v.trim())),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, int.tryParse(_kolom.text.trim())),
+          child: const Text('Simpan'),
+        ),
+      ],
+    );
+  }
+}
+

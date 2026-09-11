@@ -116,14 +116,25 @@ class _TagOkPageState extends State<TagOkPage> {
     }
   }
 
-  /// Area yang boleh dipilih: izin area user bila diatur admin, selain itu
-  /// seluruh area STO yang dikenal.
+  /// Area yang boleh dipilih: seluruh area STO untuk admin, persis izin
+  /// yang diberikan admin untuk operator - kosong berarti tidak ada.
   List<String> _areaTersedia(AppUser user) =>
-      user.areas.isEmpty ? AppConfig.areaSto : user.areas;
+      user.areaDiizinkan(AppConfig.areaSto);
 
   Widget _pilihArea() {
     final user = context.read<SessionProvider>().user;
     final pilihan = user == null ? AppConfig.areaSto : _areaTersedia(user);
+
+    // Operator tanpa izin area: dropdown kosong hanya membuatnya menekan-nekan
+    // tombol yang tidak menjawab. Sebabnya disebut, beserta siapa yang bisa
+    // membereskannya.
+    if (pilihan.isEmpty) {
+      return const Text(
+        'Area kerja belum diatur admin - minta admin mengisinya lewat '
+        'Setting > User & Izin.',
+        style: TextStyle(fontSize: 12, color: AppColors.danger),
+      );
+    }
 
     return DropdownButton<String>(
       value: _area.isEmpty ? null : _area,

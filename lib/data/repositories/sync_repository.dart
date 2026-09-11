@@ -4,6 +4,7 @@ import '../local/prefs_store.dart';
 import '../local/tag_dao.dart';
 import '../models/print_batch.dart';
 import '../models/sto_tag.dart';
+import '../remote/api_client.dart';
 import '../remote/api_gateway.dart';
 
 class SyncResult {
@@ -11,15 +12,27 @@ class SyncResult {
     required this.sent,
     required this.failed,
     required this.remaining,
+    this.rejected = 0,
     this.lastError,
+    this.rejectionMessage,
   });
 
   final int sent;
+
+  /// Gagal sementara - jaringan, server sibuk. Tetap di antrean, dicoba lagi.
   final int failed;
+
+  /// Ditolak tetap oleh server (4xx). Dikeluarkan dari antrean; mengulanginya
+  /// tidak akan pernah berhasil.
+  final int rejected;
+
   final int remaining;
   final String? lastError;
 
-  bool get hasError => failed > 0;
+  /// Alasan penolakan terakhir, sudah dalam kalimat dari server.
+  final String? rejectionMessage;
+
+  bool get hasError => failed > 0 || rejected > 0;
 }
 
 /// Mengirim isi outbox ke server. Aman dipanggil berkali-kali:
@@ -48,6 +61,9 @@ class SyncRepository {
     var failed = 0;
     String? lastError;
 
+    var rejected = 0;
+    String? rejectionMessage;
+
     for (final item in items) {
       try {
         await _send(item);
@@ -58,6 +74,28 @@ class SyncRepository {
           await tagDao.markSynced([item.refId]);
         }
         sent++;
+      } on ApiException catch (e) {
+        if (_penolakanTetap(e)) {
+          // Server sudah memutuskan: tag tidak ada, angka milik orang lain,
+          // permintaan tidak sah. Mengulanginya tiap sinkron hanya membuat
+          // lencana "belum sinkron" menyala selamanya - dan, kalau item
+          // semacam ini menumpuk, menghalangi kiriman sah di belakangnya.
+          //
+          // Barisnya ditandai GAGAL supaya masih terlihat di riwayat,
+          // lalu dikeluarkan dari antrean.
+          rejected++;
+          rejectionMessage = e.message;
+          await outboxDao.remove(item.id);
+          if (item.type == OutboxType.countSubmitted) {
+            await countDao.markFailed(item.refId);
+          } else if (item.type != OutboxType.batchCreated) {
+            await tagDao.markFailed(item.refId);
+          }
+        } else {
+          failed++;
+          lastError = e.toString();
+          await outboxDao.markFailed(item.id, e.toString());
+        }
       } catch (e) {
         failed++;
         lastError = e.toString();
@@ -70,9 +108,23 @@ class SyncRepository {
     return SyncResult(
       sent: sent,
       failed: failed,
+      rejected: rejected,
       remaining: await outboxDao.count(),
       lastError: lastError,
+      rejectionMessage: rejectionMessage,
     );
+  }
+
+  /// Penolakan yang tidak akan berubah walau dicoba lagi.
+  ///
+  /// 4xx adalah keputusan server atas isi permintaannya - bukan keadaan
+  /// sesaat. Dua pengecualian: 408 (server kehabisan waktu menunggu) dan 429
+  /// (terlalu sering) memang sesaat, dan dicoba lagi nanti.
+  static bool _penolakanTetap(ApiException e) {
+    final kode = e.statusCode;
+    if (kode == null) return false;
+    if (kode == 408 || kode == 429) return false;
+    return kode >= 400 && kode < 500;
   }
 
   Future<void> _send(OutboxItem item) async {

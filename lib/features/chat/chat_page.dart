@@ -104,11 +104,17 @@ class _ChatPageState extends State<ChatPage> {
                       indent: 72,
                       color: AppColors.border,
                     ),
-                    itemBuilder: (context, i) => _baris(
-                      chat.threads[i],
-                      user?.nik ?? '',
-                      admin: admin,
-                    ),
+                    itemBuilder: (context, i) {
+                      final t = chat.threads[i];
+                      return RepaintBoundary(
+                        key: ValueKey('thread_${t.thread}'),
+                        child: _baris(
+                          t,
+                          user?.nik ?? '',
+                          admin: admin,
+                        ),
+                      );
+                    },
                   ),
       ),
     );
@@ -354,8 +360,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         controller: _gulir,
                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                         itemCount: chat.pesan.length,
-                        itemBuilder: (context, i) =>
-                            _gelembung(chat.pesan[i], nik),
+                        itemBuilder: (context, i) {
+                          final m = chat.pesan[i];
+                          return RepaintBoundary(
+                            key: ValueKey('msg_${m.id}'),
+                            child: _gelembung(m, nik),
+                          );
+                        },
                       ),
           ),
           if (bolehMenulis) _kotakTulis(chat) else _catatanBaca(),
